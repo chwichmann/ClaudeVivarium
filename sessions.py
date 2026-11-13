@@ -27,8 +27,9 @@ STATE_MAP = {
     "requires_action": "waiting",
     "blocked": "blocked",
     "idle": "idle",
-    "shell": "idle",  # waiting at a shell prompt (e.g. an old version kept running after an update)
+    "shell": "working",  # turn ended, but a background shell task is still running (e.g. a test suite)
 }
+BACKGROUND_STATUSES = {"shell"}
 
 _transcript_cache = {}  # path -> ((size, mtime), info)
 
@@ -93,7 +94,7 @@ def _tool_detail(inp):
 
 
 def _parse_transcript(path):
-    info = {"tool": None, "tool_detail": "", "last_text": "", "prompt": "", "tool_events": []}
+    info = {"tool": None, "tool_detail": "", "last_text": "", "prompt": "", "tool_events": [], "bg_task": ""}
     try:
         st = os.stat(path)
     except OSError:
@@ -130,6 +131,8 @@ def _parse_transcript(path):
                     detail = _tool_detail(item.get("input"))
                     events.append((item.get("id") or f"{len(events)}", name, detail))
                     info["tool"], info["tool_detail"] = name, detail
+                    if isinstance(item.get("input"), dict) and item["input"].get("run_in_background"):
+                        info["bg_task"] = detail or name  # the latest task started in the background
                 elif item.get("type") == "text" and item.get("text", "").strip():
                     info["last_text"] = _one_line(item["text"])
         elif typ == "user" and not obj.get("isMeta") and not obj.get("isSidechain"):
@@ -177,6 +180,8 @@ def read_sessions():
             "cwd": _short_path(cwd),
             "status": status,
             "state": STATE_MAP.get(status, "idle"),
+            "background": status in BACKGROUND_STATUSES,
+            "bg_task": t.get("bg_task", ""),
             "waiting_for": str(waiting_for) if waiting_for else "",
             "since": (since_ms / 1000.0) if since_ms else time.time(),
             "started": (raw.get("startedAt") or 0) / 1000.0,
@@ -235,7 +240,17 @@ def demo_sessions(t=None):
             "last_text": _DEMO_TEXT[i % len(_DEMO_TEXT)],
             "prompt": "Refactor the parser and add tests",
             "tool_events": events,
+            "background": False, "bg_task": "",
         })
+    out.append({  # a test bench: turn finished, suite still running as a background task
+        "id": "demo-bg", "pid": 1099, "name": "Test bench", "cwd": "~/dev/netdocs",
+        "status": "shell", "state": "working", "background": True,
+        "bg_task": "Wait for all test rows to finish", "waiting_for": "",
+        "since": now - (t % 900) - 120, "started": now - 7200,
+        "tool": "Bash", "tool_detail": "Wait for all test rows to finish",
+        "last_text": "The test rows are running in the background.", "prompt": "Run the test bench",
+        "tool_events": [("bg-0", "Bash", "Wait for all test rows to finish")],
+    })
     return out
 
 

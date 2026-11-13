@@ -12,6 +12,7 @@ Every session is one creature. The state colour is the same in every theme:
 | idle | blue | slow, grazes / rests |
 | needs you (waiting for permission/input) | amber | comes to the front, pulsing rings, banner at the top |
 | blocked | red | flickers |
+| background (turn finished, a background task such as a test suite still runs) | violet | moves like working; the label shows the background task |
 
 Eleven themes rotate in random order (default every 10 minutes, fade through black):
 

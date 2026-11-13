@@ -44,11 +44,19 @@ COLORS = {
     "waiting": (1.00, 0.70, 0.22),
     "blocked": (1.00, 0.30, 0.36),
     "rest": (0.62, 0.62, 0.78),  # the resting creature shown when no session is running
+    "background": (0.76, 0.55, 1.00),  # turn finished, a background task (e.g. test suite) still runs
 }
-LABELS = {"working": "working", "idle": "idle", "waiting": "needs you", "blocked": "blocked"}
+LABELS = {"working": "working", "idle": "idle", "waiting": "needs you", "blocked": "blocked",
+          "background": "background"}
 SIZE = {"working": 1.0, "idle": 0.9, "waiting": 1.45, "blocked": 0.95, "rest": 0.9}
 REST_ID = "__rest__"
-ORDER = {"waiting": 0, "blocked": 1, "working": 2, "idle": 3}
+ORDER = {"waiting": 0, "blocked": 1, "working": 2, "background": 2, "idle": 3}
+
+
+def look(info):
+    """State for colour and label. A session running a background task moves like a working one
+    (its state is "working") but is shown in its own colour as "background"."""
+    return "background" if info.get("background") else info.get("state", "idle")
 CLAUDE_ORANGE = (0.85, 0.47, 0.34)
 
 
@@ -247,7 +255,7 @@ class Actor:
         self.heading = self.rng.uniform(0, TAU)
         self.phase = self.rng.uniform(0, TAU)
         st = info.get("state", "idle")
-        self.color = COLORS.get(st, COLORS["idle"])
+        self.color = COLORS.get(look(info), COLORS["idle"])
         self.size_mul = SIZE.get(st, 1.0)
         self.alpha = 0.0
         self.dying = False
@@ -262,7 +270,7 @@ class Actor:
 
     def update(self, dt, t, target):
         st = self.state
-        self.color = lerp3(self.color, COLORS.get(st, COLORS["idle"]), min(1.0, dt * 2.0))
+        self.color = lerp3(self.color, COLORS.get(look(self.info), COLORS["idle"]), min(1.0, dt * 2.0))
         breathe = 1 + (0.06 * math.sin(t * 3.0) if st == "waiting" else 0)
         self.size_mul = lerp(self.size_mul, SIZE.get(st, 1.0) * breathe, min(1.0, dt * 1.5))
         self.alpha = lerp(self.alpha, 0.0 if self.dying else (0.8 if st == "rest" else 1.0), min(1.0, dt * 1.2))
@@ -339,15 +347,18 @@ class Actor:
         scene = self.scene
         s, T, info = scene.s, scene.text, self.info
         st = self.state
-        c = COLORS.get(st, COLORS["idle"])
+        vis = look(info)
+        c = COLORS.get(vis, COLORS["idle"])
         maxw = 380 * s
         lines = [(T.layout(cr, info.get("name", "?"), 21 * s, Weight.BOLD, maxw), (1, 1, 1), 0.95)]
-        status = f"● {LABELS.get(st, st)} · {fmt_duration(time.time() - info.get('since', time.time()))}"
+        status = f"● {LABELS.get(vis, vis)} · {fmt_duration(time.time() - info.get('since', time.time()))}"
         lines.append((T.layout(cr, status, 16 * s, Weight.SEMIBOLD, maxw), c, 1.0))
         if show_text:
             detail = ""
             if st == "waiting":
                 detail = f"waiting for {info['waiting_for']}" if info.get("waiting_for") else "waiting for your input"
+            elif vis == "background" and info.get("bg_task"):
+                detail = f"running: {info['bg_task']}"  # plain text: the arrow symbol is missing in some fonts
             elif st == "working" and info.get("tool"):
                 detail = f"{info['tool']}  {info.get('tool_detail', '')}".strip()
             elif info.get("last_text"):
@@ -373,8 +384,7 @@ class Actor:
     def draw_label(self, cr, lab, lx, ly):
         scene = self.scene
         s, a = scene.s, self.alpha
-        st = self.state
-        c = COLORS.get(st, COLORS["idle"])
+        c = COLORS.get(look(self.info), COLORS["idle"])
         lines, sizes, w, h = lab
         pad = 12 * s
         bg = scene.label_bg
@@ -797,7 +807,7 @@ class Scene:
         limit = rx - cw - dw - 50 * s
         infos = sorted(self.sessions, key=lambda i: (ORDER.get(i.get("state"), 9), i.get("name", "")))
         for info in infos:
-            st = info.get("state", "idle")
+            st = look(info)
             c = COLORS.get(st, COLORS["idle"])
             name = T.layout(cr, info.get("name", "?"), 16 * s, Weight.BOLD, 220 * s)
             lab = T.layout(cr, f"{LABELS.get(st, st)} · {fmt_duration(time.time() - info.get('since', time.time()))}",
