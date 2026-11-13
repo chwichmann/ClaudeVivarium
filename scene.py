@@ -28,7 +28,7 @@ except (ImportError, ValueError):
 if HAVE_PANGO:
     FONT, MONO = "Ubuntu Sans", "Ubuntu Sans Mono"
 elif sys.platform == "darwin":
-    FONT, MONO = "Helvetica Neue", "Menlo"
+    FONT, MONO = "HelveticaNeue", "Menlo-Regular"
 else:
     FONT, MONO = "Segoe UI", "Consolas"
 TAU = math.tau
@@ -155,11 +155,11 @@ class _ToyLayout:
 
 class ToyText:
     """Text via Cairo's built-in font support (Windows, macOS) - same interface as PangoText."""
-    if sys.platform == "darwin":
-        FACES = {Weight.LIGHT: ("Helvetica Neue Light", False), Weight.NORMAL: ("Helvetica Neue", False),
-                 Weight.SEMIBOLD: ("Helvetica Neue Medium", False), Weight.BOLD: ("Helvetica Neue", True),
-                 Weight.HEAVY: ("Helvetica Neue", True)}
-        SYMBOLS = "Apple Symbols"
+    if sys.platform == "darwin":  # Cairo's Quartz backend finds fonts by PostScript name
+        FACES = {Weight.LIGHT: ("HelveticaNeue-Light", False), Weight.NORMAL: ("HelveticaNeue", False),
+                 Weight.SEMIBOLD: ("HelveticaNeue-Medium", False), Weight.BOLD: ("HelveticaNeue-Bold", False),
+                 Weight.HEAVY: ("HelveticaNeue-Bold", False)}
+        SYMBOLS = "AppleSymbols"
     else:
         FACES = {Weight.LIGHT: ("Segoe UI Light", False), Weight.NORMAL: ("Segoe UI", False),
                  Weight.SEMIBOLD: ("Segoe UI Semibold", False), Weight.BOLD: ("Segoe UI", True),
@@ -762,7 +762,18 @@ class Scene:
         Text.show(cr, date, rx - cw - dw - 14 * s, cy - dh / 2, (0.7, 0.8, 0.9), 0.6)
 
         x = 36 * s + ox
-        brand = T.layout(cr, "✳ Claude Code", 15 * s, Weight.SEMIBOLD)
+        # Claude asterisk drawn as lines (no symbol font needed on any platform), then the name
+        ar = 7 * s
+        cr.set_source_rgba(CLAUDE_ORANGE[0], CLAUDE_ORANGE[1], CLAUDE_ORANGE[2], 0.85)
+        cr.set_line_width(2 * s)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        for k in range(4):
+            a = k * math.pi / 4
+            cr.move_to(x + ar + math.cos(a) * ar, cy + math.sin(a) * ar)
+            cr.line_to(x + ar - math.cos(a) * ar, cy - math.sin(a) * ar)
+        cr.stroke()
+        x += 2 * ar + 7 * s
+        brand = T.layout(cr, "Claude Code", 15 * s, Weight.SEMIBOLD)
         bw_, bh_ = brand.get_pixel_size()
         Text.show(cr, brand, x, cy - bh_ / 2, CLAUDE_ORANGE, 0.85)
         x += bw_ + 34 * s

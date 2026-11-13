@@ -1,7 +1,8 @@
 # Claude Vivarium
 
 A screensaver that shows the live state of your local [Claude Code](https://claude.com/claude-code) sessions -
-as creatures in a vivarium. Runs on **Ubuntu/GNOME (Wayland)** and **Windows**.
+as creatures in a vivarium. Runs on **Ubuntu/GNOME (Wayland)** and **Windows**; **macOS** support is
+prepared but not tested yet (see below).
 
 Every session is one creature. The state colour is the same in every theme:
 
@@ -43,6 +44,8 @@ vivarium_gtk.py    Linux: full-screen GTK4 window, locks on wake
 vivariumd.py       Linux: idle watcher (systemd user service) + CPU/memory recorder
 gnome.py           Linux: GNOME D-Bus helpers (lock, idle, inhibit)
 vivarium_win.py    Windows: the .scr screensaver (/s /p /c), recorder, installer
+vivarium_mac.py    macOS: full-screen windows via PyObjC, locks on wake, --selftest
+vivariumd_mac.py   macOS: idle agent (LaunchAgent) + CPU/memory recorder
 render_preview.py  render themes to PNG without a display (testing)
 ```
 
@@ -64,12 +67,26 @@ with "On resume, display logon screen", locks on wake itself. Main monitor: ever
 another theme as decoration (rendered in a second thread). `--record` runs at logon and keeps the
 CPU/memory history.
 
+### macOS (prepared, not tested yet)
+
+Same pattern as Linux: a native `.saver` bundle runs sandboxed inside Apple's screensaver host and
+could not read `~/.claude`, so instead:
+
+- `vivariumd_mac.py` runs as a LaunchAgent, checks the idle time every 2 s and starts
+  `vivarium_mac.py` after `idle_seconds` (not when locked, not when a video keeps the display awake).
+  It also records CPU/memory.
+- `vivarium_mac.py` opens a window at screen-saver level on every screen, keeps the display awake
+  (`caffeinate`), and on a key, click or focus loss **locks first** (the menu-bar "Lock Screen" call,
+  fallback `pmset displaysleepnow`), waits until macOS confirms, then closes. If the screensaver exits
+  while the screen is unlocked, the agent locks.
+
 ## Settings
 
 | Platform | File |
 |---|---|
 | Linux | `~/.config/claude-vivarium/config.ini` |
 | Windows | `%APPDATA%\ClaudeVivarium\config.ini` (the "Settings..." button in the Windows dialog opens it) |
+| macOS | `~/Library/Application Support/ClaudeVivarium/config.ini` |
 
 ```ini
 idle_seconds = 240     # Linux: start after this much idle time (below GNOME's blank delay);
@@ -114,6 +131,23 @@ Undo with `ClaudeVivarium.exe --uninstall`. Log: `%LOCALAPPDATA%\ClaudeVivarium\
 ```powershell
 .venv\Scripts\python vivarium_win.py --windowed --demo    # preview from source
 ```
+
+### macOS (no admin rights needed)
+
+Needs [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`).
+
+```bash
+git clone https://github.com/chwichmann/ClaudeVivarium.git && cd ClaudeVivarium
+./install-mac.sh                 # cairo + Python env + LaunchAgent; prints the next steps
+APP="$HOME/Library/Application Support/ClaudeVivarium"
+"$APP/venv/bin/python" "$APP/app/vivarium_mac.py" --selftest        # checks + PNGs on the Desktop
+"$APP/venv/bin/python" "$APP/app/vivarium_mac.py" --windowed --demo # preview, Esc closes
+tail -f ~/Library/Logs/ClaudeVivarium.log
+./install-mac.sh --uninstall
+```
+
+In System Settings > Lock Screen: start the macOS screen saver and turn the display off *later* than
+`idle_seconds`, and set "Require password ... " to **Immediately**.
 
 ## Testing without watching
 

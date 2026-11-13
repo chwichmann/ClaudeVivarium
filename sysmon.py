@@ -13,6 +13,8 @@ INTERVAL = 5                      # seconds between samples
 HISTORY = 30 * 60 // INTERVAL     # 30 minutes
 if sys.platform == "win32":
     _DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "ClaudeVivarium")
+elif sys.platform == "darwin":
+    _DIR = os.path.expanduser("~/Library/Caches/ClaudeVivarium")
 else:
     _DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
 PATH = os.path.join(_DIR, "claude-vivarium-stats.json")
@@ -42,6 +44,41 @@ if sys.platform == "win32":
         st.dwLength = ctypes.sizeof(_MEMSTATUS)
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st))
         return st.ullTotalPhys - st.ullAvailPhys, st.ullTotalPhys
+elif sys.platform == "darwin":
+    import ctypes
+    import re
+    import subprocess
+
+    _libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+    _libc.mach_host_self.restype = ctypes.c_uint
+    _libc.host_statistics.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_uint),
+                                      ctypes.POINTER(ctypes.c_uint)]
+    _HOST = _libc.mach_host_self()
+
+    def _memsize():
+        val, size = ctypes.c_uint64(0), ctypes.c_size_t(8)
+        _libc.sysctlbyname(b"hw.memsize", ctypes.byref(val), ctypes.byref(size), None, ctypes.c_size_t(0))
+        return val.value
+
+    _TOTAL = _memsize()
+
+    def _read_cpu():
+        ticks = (ctypes.c_uint * 4)()       # HOST_CPU_LOAD_INFO: user, system, idle, nice
+        count = ctypes.c_uint(4)
+        _libc.host_statistics(_HOST, 3, ticks, ctypes.byref(count))
+        return ticks[0] + ticks[1] + ticks[2] + ticks[3], ticks[2]
+
+    def _read_mem():
+        """'Memory used' like Activity Monitor: app (active) + wired + compressed pages."""
+        out = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=5).stdout
+        m = re.search(r"page size of (\d+) bytes", out)
+        page = int(m.group(1)) if m else 4096
+
+        def pages(name):
+            p = re.search(re.escape(name) + r":\s+(\d+)", out)
+            return int(p.group(1)) if p else 0
+        used = (pages("Pages active") + pages("Pages wired down") + pages("Pages occupied by compressor")) * page
+        return used, _TOTAL
 else:
     def _read_cpu():
         with open("/proc/stat", encoding="ascii") as f:

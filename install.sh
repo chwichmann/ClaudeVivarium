@@ -32,7 +32,7 @@ mkdir -p "$DEST" "$HOME/.config/systemd/user" "$HOME/.local/bin"
 rm -f "$DEST"/*.py
 install -m 644 "$SRC"/*.py "$DEST"/
 chmod 755 "$DEST/vivarium_gtk.py" "$DEST/vivariumd.py"
-rm -f "$DEST/vivarium_win.py"   # Windows only
+rm -f "$DEST/vivarium_win.py" "$DEST/vivarium_mac.py" "$DEST/vivariumd_mac.py"   # other platforms
 python3 -c "import sys; sys.path.insert(0, '$DEST'); import config; config.load(); print('Settings:', config.PATH)"
 ln -sf "$DEST/vivarium_gtk.py" "$HOME/.local/bin/claude-vivarium"
 sed "s|@DEST@|$DEST|g" "$SRC/claude-vivarium.service" > "$UNIT"
