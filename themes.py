@@ -4,12 +4,16 @@ import random
 import scene  # noqa: F401  (picks the text backend before the themes load)
 from theme_aquarium import Aquarium
 from theme_forest import Forest
+from theme_guppies import Guppies
+from theme_meerkats import Meerkats
 from theme_pasture import Pasture
 from theme_seabed import Seabed
 from theme_space import Space
 from theme_synthwave import Synthwave
+from theme_terrarium import Terrarium
 
-THEMES = {cls.name: cls for cls in (Aquarium, Space, Synthwave, Pasture, Seabed, Forest)}
+THEMES = {cls.name: cls for cls in (Aquarium, Space, Synthwave, Pasture, Seabed, Forest, Guppies, Terrarium,
+                                   Meerkats)}
 
 
 def parse_list(value):

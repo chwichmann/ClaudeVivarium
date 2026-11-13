@@ -605,7 +605,19 @@ class Scene:
                 choice = (0, clamp(cands[0][0], lo_x, hi_x), clamp(cands[0][1], lo_y, hi_y))
             a.label_choice = choice[0]
             placed.append((choice[1], choice[2], pw, ph))
-            a.draw_label(cr, lab, choice[1], choice[2])
+            # Glide to a new spot instead of jumping. The offset to the creature is smoothed (not the
+            # absolute position), so the label still follows the creature exactly while it moves.
+            tx, ty = choice[1] - a.x, choice[2] - a.y
+            last = getattr(a, "label_off", None)
+            dtl = self.t - getattr(a, "label_t", self.t)
+            a.label_t = self.t
+            if last is None or dtl < 0 or dtl > 0.5:
+                ox, oy = tx, ty                      # first frame or after a pause: no animation
+            else:
+                k = 1.0 - math.exp(-dtl * 5.0)       # ~90 % of the way in half a second
+                ox, oy = lerp(last[0], tx, k), lerp(last[1], ty, k)
+            a.label_off = (ox, oy)
+            a.draw_label(cr, lab, clamp(a.x + ox, lo_x, hi_x), clamp(a.y + oy, lo_y, hi_y))
 
     SYS_W, SYS_H = 300, 192
 
@@ -711,6 +723,8 @@ class Scene:
                 cr.arc(x, y, 14 * s, 0, TAU)
                 cr.fill()
                 tx = x + 14 * s
+            if not f["label"]:
+                continue  # plain bubble (air stone, sleepy crab)
             lay = self.text.layout(cr, f["label"], 15 * s, Weight.SEMIBOLD)
             th = lay.get_pixel_size()[1]
             Text.show(cr, lay, tx, y - th / 2, lighten(c, 0.3), 0.95 * fade, shadow=0.7)

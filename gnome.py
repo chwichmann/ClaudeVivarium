@@ -71,6 +71,34 @@ def request_lock(bus):
         return False
 
 
+def nudge_pointer(bus):
+    """Wake the lock screen after we locked it ourselves.
+
+    GNOME fades to black 0.3 s after any programmatic lock and only wakes up on input that arrives
+    after that - so the key that woke the screensaver is not enough and a second key would be needed.
+    A 1-pixel virtual pointer move (Mutter's remote desktop API, open to programs in the session)
+    counts as new input, so the lock screen stays visible. On a locked screen input can only show
+    the lock screen, never unlock it.
+    """
+    rd, path = "org.gnome.Mutter.RemoteDesktop", None
+    iface = "org.gnome.Mutter.RemoteDesktop.Session"
+    try:
+        path = _call(bus, rd, "/org/gnome/Mutter/RemoteDesktop", rd, "CreateSession", reply="(o)")[0]
+        _call(bus, rd, path, iface, "Start")
+        for dx in (1.0, -1.0):
+            _call(bus, rd, path, iface, "NotifyPointerMotionRelative", GLib.Variant("(dd)", (dx, 0.0)))
+        return True
+    except GLib.Error as e:
+        log(f"could not wake the lock screen: {e.message}")
+        return False
+    finally:
+        if path:
+            try:
+                _call(bus, rd, path, iface, "Stop")
+            except GLib.Error:
+                pass
+
+
 def idle_inhibited(bus):
     """True if some app (video player, presentation, ...) asked GNOME not to go idle."""
     try:

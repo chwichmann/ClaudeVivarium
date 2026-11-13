@@ -49,6 +49,7 @@ class Screensaver(Gtk.Application):
         self.monitor = sysmon.Monitor() if opts.system_monitor else None
         self.started = time.monotonic()
         self.exiting = False
+        self.wake_by_user = False
         self.exit_code = 0
         self.was_active = False
         self.motion_origin = None
@@ -203,6 +204,7 @@ class Screensaver(Gtk.Application):
             return
         self.exiting = True
         log(f"wake: {reason}")
+        self.wake_by_user = reason.startswith(("key", "mouse", "scroll", "focus"))
         if not self.locking:
             self.quit()
             return
@@ -212,15 +214,23 @@ class Screensaver(Gtk.Application):
 
     def wait_locked(self):
         if gnome.screen_locked(self.bus):
-            log("screen is locked - closing")
-            self.quit()
+            log("screen is locked - waking the lock screen, then closing")
+            GLib.timeout_add(500, self.wake_lock_screen)  # after GNOME's 0.3 s "fade to black" started
             return False
         if time.monotonic() > self.lock_deadline:
-            log("lock NOT confirmed within 5 s - exiting with error so the daemon retries")
+            log("lock NOT confirmed within 5 s - exiting with error so the daemon locks")
             self.exit_code = 3
             self.quit()
             return False
         return True
+
+    def wake_lock_screen(self):
+        """So one key is enough: without this, GNOME blanks right after our lock and needs a second key.
+        Only when a person woke us - after max time, a kill signal etc. nobody is there and black is right."""
+        if self.wake_by_user:
+            gnome.nudge_pointer(self.bus)
+        self.quit()
+        return False
 
 
 def main():
