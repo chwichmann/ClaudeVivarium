@@ -10,7 +10,7 @@ if (-not (Test-Path .venv\Scripts\python.exe)) {
 }
 .venv\Scripts\python -m pip install -q --disable-pip-version-check pycairo pyinstaller
 
-$hidden = "theme_aquarium","theme_space","theme_synthwave","theme_pasture","theme_seabed","theme_forest","theme_guppies","theme_terrarium","theme_meerkats","theme_espresso" |
+$hidden = "theme_aquarium","theme_space","theme_synthwave","theme_pasture","theme_seabed","theme_forest","theme_guppies","theme_terrarium","theme_meerkats","theme_espresso","theme_archipelago" |
     ForEach-Object { "--hidden-import=$_" }
 .venv\Scripts\pyinstaller --noconfirm --clean --onedir --noconsole --name ClaudeVivarium `
     --distpath dist --workpath build $hidden vivarium_win.py

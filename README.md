@@ -13,7 +13,7 @@ Every session is one creature. The state colour is the same in every theme:
 | needs you (waiting for permission/input) | amber | comes to the front, pulsing rings, banner at the top |
 | blocked | red | flickers |
 
-Ten themes rotate in random order (default every 10 minutes, fade through black):
+Eleven themes rotate in random order (default every 10 minutes, fade through black):
 
 | Theme | Sessions are | Tool calls |
 |---|---|---|
@@ -27,6 +27,7 @@ Ten themes rotate in random order (default every 10 minutes, fade through black)
 | terrarium | chameleons on branches, coloured in the state colour | tongue strike at a fly |
 | meerkats | meerkats at sunset; the one that needs you stands sentinel | digging, sand flies |
 | espresso | winged espresso pots gliding through a starry night, coffee beans tumbling by | steam puffs |
+| archipelago | one island per session with a castaway; the sky follows the real time of day | message in a bottle |
 
 Also on screen: a status strip with all sessions, time in state and a clock; a small panel with CPU %
 and memory GB and a 30-minute graph. With no session running, a resting creature appears (a sleeping
