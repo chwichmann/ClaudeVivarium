@@ -3,6 +3,7 @@ import random
 
 import scene  # noqa: F401  (picks the text backend before the themes load)
 from theme_aquarium import Aquarium
+from theme_espresso import Espresso
 from theme_forest import Forest
 from theme_guppies import Guppies
 from theme_meerkats import Meerkats
@@ -13,15 +14,24 @@ from theme_synthwave import Synthwave
 from theme_terrarium import Terrarium
 
 THEMES = {cls.name: cls for cls in (Aquarium, Space, Synthwave, Pasture, Seabed, Forest, Guppies, Terrarium,
-                                   Meerkats)}
+                                   Meerkats, Espresso)}
 
 
 def parse_list(value):
-    """'all' or 'aquarium, sheep' -> list of valid theme names (never empty)."""
-    if not value or value.strip().lower() in ("all", "random", "*"):
-        return list(THEMES)
-    names = [n.strip().lower() for n in value.replace(";", ",").split(",")]
-    names = [n for n in names if n in THEMES]
+    """Theme selection from the settings -> list of valid theme names (never empty).
+
+      all                         every theme
+      pasture, seabed, forest     only these
+      all, -synthwave, -space     every theme except these
+    """
+    words = [n.strip().lower() for n in (value or "all").replace(";", ",").split(",") if n.strip()]
+    include = [n for n in words if not n.startswith("-")]
+    exclude = {n[1:].strip() for n in words if n.startswith("-")}
+    if not include or any(n in ("all", "random", "*") for n in include):
+        names = list(THEMES)
+    else:
+        names = [n for n in include if n in THEMES]
+    names = [n for n in names if n not in exclude]
     return names or list(THEMES)
 
 

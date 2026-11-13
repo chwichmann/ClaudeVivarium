@@ -333,6 +333,9 @@ class Actor:
         """Build the label text. Returns (lines, sizes, width, height) or None."""
         if self.alpha < 0.05 or self.state == "rest":
             return None
+        sc = self.scene
+        if not (0 <= self.x <= sc.w and 0 <= self.y <= sc.h - sc.strip_h):
+            return None  # off screen (flying themes wrap around the edges)
         scene = self.scene
         s, T, info = scene.s, scene.text, self.info
         st = self.state

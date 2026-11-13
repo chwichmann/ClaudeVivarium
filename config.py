@@ -36,10 +36,11 @@ mouse_move = hint
 # true = show only session names and states, no prompt/answer/tool text
 hide_text = false
 
-# Themes: aquarium, space, synthwave, pasture, seabed, forest, guppies, terrarium, meerkats
+# Themes: aquarium, space, synthwave, pasture, seabed, forest, guppies, terrarium, meerkats, espresso
 #   all             = rotate through every theme
 #   one name        = always this theme
 #   comma list      = rotate through these, e.g.  themes = pasture, seabed, forest
+#   all, -name      = everything except these, e.g.  themes = all, -synthwave, -space
 themes = all
 
 # Minutes until the next theme (0 = never switch)

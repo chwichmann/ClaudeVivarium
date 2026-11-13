@@ -13,7 +13,7 @@ Every session is one creature. The state colour is the same in every theme:
 | needs you (waiting for permission/input) | amber | comes to the front, pulsing rings, banner at the top |
 | blocked | red | flickers |
 
-Nine themes rotate in random order (default every 10 minutes, fade through black):
+Ten themes rotate in random order (default every 10 minutes, fade through black):
 
 | Theme | Sessions are | Tool calls |
 |---|---|---|
@@ -26,6 +26,7 @@ Nine themes rotate in random order (default every 10 minutes, fade through black
 | guppies | guppies - working sessions are colourful males, idle ones plain females | bubbles |
 | terrarium | chameleons on branches, coloured in the state colour | tongue strike at a fly |
 | meerkats | meerkats at sunset; the one that needs you stands sentinel | digging, sand flies |
+| espresso | winged espresso pots gliding through a starry night, coffee beans tumbling by | steam puffs |
 
 Also on screen: a status strip with all sessions, time in state and a clock; a small panel with CPU %
 and memory GB and a 30-minute graph. With no session running, a resting creature appears (a sleeping
@@ -97,7 +98,8 @@ idle_seconds = 240     # Linux: start after this much idle time (below GNOME's b
 max_minutes = 0        # 0 = run forever (display stays on); otherwise end after N minutes
 mouse_move = hint      # hint = only show "press a key or click to unlock"; wake = end
 hide_text = false      # true = only names and states, no prompt/answer/tool text
-themes = all           # all | one theme | comma list, e.g. pasture, seabed, forest
+themes = all           # all | one theme | comma list, e.g. pasture, seabed, forest |
+                       # all except some: all, -synthwave, -space
 theme_minutes = 10     # minutes per theme, 0 = never switch
 system_monitor = true  # CPU/memory panel top right
 other_monitors = theme # theme | black  (Windows, further monitors)
