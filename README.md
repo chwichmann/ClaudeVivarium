@@ -132,6 +132,8 @@ systemctl --user disable --now claude-vivarium    # turn off
 
 This copies the program to `%LOCALAPPDATA%\Programs\ClaudeVivarium`, sets it as your screen saver
 (timeout = `idle_seconds`, "display logon screen" on), and adds a Startup shortcut for the recorder.
+While the screensaver runs, **→ (right arrow)** switches to the next theme; any other key ends it.
+
 Undo with `ClaudeVivarium.exe --uninstall`. Log: `%LOCALAPPDATA%\ClaudeVivarium\vivarium.log`.
 
 Windows does not start a screen saver while the PC is locked (the lock screen just turns the display

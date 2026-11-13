@@ -151,6 +151,9 @@ class Screensaver(Gtk.Application):
         if self.opts.windowed and keyval in (Gdk.KEY_n, Gdk.KEY_N, Gdk.KEY_Right, Gdk.KEY_space):
             self.scene.next_theme()  # preview: flip through the themes
             return True
+        if keyval == Gdk.KEY_Right:  # full screen: right arrow = next theme, any other key wakes (and locks)
+            self.scene.next_theme()
+            return True
         if not self.in_grace():
             self.wake(f"key {Gdk.keyval_name(keyval)}")
         return True
@@ -163,7 +166,7 @@ class Screensaver(Gtk.Application):
         if abs(x - ox) + abs(y - oy) > MOTION_THRESHOLD:
             if self.opts.mouse_move == "hint" and not self.opts.windowed:
                 self.motion_origin = (x, y)
-                self.scene.show_hint("Press a key or click to unlock")
+                self.scene.show_hint("Press a key or click to unlock   ·   → next theme")
             else:
                 self.wake("mouse moved")
 

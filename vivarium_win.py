@@ -344,6 +344,9 @@ class App:
                         if c.show:
                             c.show.next_theme()
                 return 0
+            if wp == VK_RIGHT and self.mode == "full":  # right arrow = next theme, any other key ends (locks)
+                self.main_show.next_theme()
+                return 0
             if not self.in_grace():
                 self.quit(f"key {wp}")
             return 0
@@ -361,7 +364,7 @@ class App:
             elif abs(pt.x - self.mouse_origin[0]) + abs(pt.y - self.mouse_origin[1]) > MOTION_THRESHOLD:
                 if self.cfg["mouse_move"] == "hint":
                     self.mouse_origin = (pt.x, pt.y)
-                    self.main_show.show_hint("Press a key or click to unlock")
+                    self.main_show.show_hint("Press a key or click to unlock   ·   → next theme")
                 else:
                     self.quit("mouse moved")
             return 0

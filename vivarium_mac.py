@@ -250,9 +250,12 @@ class App:
             elif abs(p.x - self.mouse_origin[0]) + abs(p.y - self.mouse_origin[1]) > MOTION_THRESHOLD:
                 if self.cfg["mouse_move"] == "hint":
                     self.mouse_origin = (p.x, p.y)
-                    self.main_show.show_hint("Press a key or click to unlock")
+                    self.main_show.show_hint("Press a key or click to unlock   ·   → next theme")
                 else:
                     self.wake("mouse moved")
+            return None
+        if t == EV_KEY_DOWN and event.keyCode() == KEY_RIGHT:  # right arrow = next theme, other keys wake
+            self.main_show.next_theme()
             return None
         if not self.in_grace():
             self.wake("key" if t == EV_KEY_DOWN else "mouse button")

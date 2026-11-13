@@ -88,8 +88,9 @@ class Show:
         self.scene.show_hint(text, seconds)
 
     def next_theme(self):
-        if len(self.names) > 1:
+        if len(self.names) > 1 and self.fading == 0:
             self.fading = 1
+            self.elapsed = 0.0  # the new theme gets its full time
 
     def update(self, dt):
         self.scene.update(dt)
