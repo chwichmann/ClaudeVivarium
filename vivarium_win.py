@@ -11,6 +11,7 @@ Locking on wake is done by Windows itself ("On resume, display logon screen").
 Extra commands:
   --windowed [--demo] [--themes x]   test in a normal window (N/Right/Space = next theme, Esc = close)
   --record                           CPU/memory recorder for the 30-minute graph (started at logon)
+  --now                              start the screensaver now via Windows (locks on resume; Ctrl+Alt+V)
   --install / --uninstall            install for the current user (no admin rights needed)
 """
 import ctypes
@@ -94,6 +95,9 @@ user32.ValidateRect.argtypes = [wintypes.HWND, wintypes.LPVOID]
 user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
 user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, wintypes.LPVOID, wintypes.UINT]
+user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.SendMessageW.restype = LRESULT
+user32.GetDesktopWindow.restype = wintypes.HWND
 gdi32.SetDIBitsToDevice.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD, wintypes.DWORD,
                                     ctypes.c_int, ctypes.c_int, wintypes.UINT, wintypes.UINT, ctypes.c_void_p,
                                     ctypes.c_void_p, wintypes.UINT]
@@ -494,11 +498,23 @@ def record():
         s.save()
 
 
-def _startup_shortcut(target, args, path):
+def _startup_shortcut(target, args, path, hotkey="", description=""):
     ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:P);"
-          "$s.TargetPath=$env:T;$s.Arguments=$env:A;$s.WorkingDirectory=(Split-Path $env:T);$s.Save()")
-    env = dict(os.environ, P=path, T=target, A=args)
+          "$s.TargetPath=$env:T;$s.Arguments=$env:A;$s.WorkingDirectory=(Split-Path $env:T);"
+          "if($env:K){$s.Hotkey=$env:K};$s.Description=$env:D;$s.Save()")
+    env = dict(os.environ, P=path, T=target, A=args, K=hotkey, D=description)
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, check=True, capture_output=True)
+
+
+START_NOW_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs",
+                             "Claude Vivarium - start now.lnk")
+
+
+def start_now():
+    """Ask Windows to start the screen saver now. Because Windows starts it (not us), its
+    'On resume, display logon screen' setting applies: any key afterwards leads to the login."""
+    time.sleep(0.6)  # let the hotkey be released first, or it would end the screensaver right away
+    user32.SendMessageW(user32.GetDesktopWindow(), WM_SYSCOMMAND, SC_SCREENSAVE, 0)
 
 
 def install(cfg):
@@ -524,9 +540,12 @@ def install(cfg):
         user32.SystemParametersInfoW(spi, val, None, 3)                # SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
     startup = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
     _startup_shortcut(scr, "--record", os.path.join(startup, "Claude Vivarium recorder.lnk"))
+    _startup_shortcut(exe, "--now", START_NOW_LNK, hotkey="CTRL+ALT+V",
+                      description="Start the Claude Vivarium screensaver now (locks on resume)")
     subprocess.Popen([scr, "--record"], creationflags=0x00000008 | 0x00000200)  # detached, own process group
     say(f"Installed to {INSTALL_DIR}\nScreensaver: {scr}\nStarts after {timeout} s idle, locks on resume.\n"
-          f"Settings: {config.PATH}")
+        f"Start it right away (instead of Win+L): Ctrl+Alt+V or Start menu 'Claude Vivarium - start now'.\n"
+        f"Settings: {config.PATH}")
 
 
 def uninstall():
@@ -541,8 +560,9 @@ def uninstall():
             pass
     lnk = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup",
                        "Claude Vivarium recorder.lnk")
-    if os.path.exists(lnk):
-        os.remove(lnk)
+    for path in (lnk, START_NOW_LNK):
+        if os.path.exists(path):
+            os.remove(path)
     user32.SystemParametersInfoW(0x0011, 0, None, 3)
     say(f"Uninstalled. The files in {INSTALL_DIR} can be deleted.")
 
@@ -565,6 +585,8 @@ def main():
         App("windowed", opts, cfg).run()
     elif a0 == "--record":
         record()
+    elif a0 == "--now":
+        start_now()
     elif a0 == "--install":
         install(cfg)
     elif a0 == "--uninstall":

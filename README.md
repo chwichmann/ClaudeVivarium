@@ -128,6 +128,11 @@ This copies the program to `%LOCALAPPDATA%\Programs\ClaudeVivarium`, sets it as 
 (timeout = `idle_seconds`, "display logon screen" on), and adds a Startup shortcut for the recorder.
 Undo with `ClaudeVivarium.exe --uninstall`. Log: `%LOCALAPPDATA%\ClaudeVivarium\vivarium.log`.
 
+Windows does not start a screen saver while the PC is locked (the lock screen just turns the display
+off after a minute). So when you leave, press **Ctrl+Alt+V** (Start menu: "Claude Vivarium - start
+now") instead of Win+L: Windows starts the vivarium right away and, as with the idle start, any key
+leads to the login.
+
 ```powershell
 .venv\Scripts\python vivarium_win.py --windowed --demo    # preview from source
 ```
