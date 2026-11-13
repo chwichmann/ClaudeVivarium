@@ -336,6 +336,42 @@ class Actor:
         self.x += self.vx * dt
         self.y += self.vy * dt
 
+    # --- sub-agents: small companions orbiting the creature
+    COMPANION_SCALE = 0.42
+
+    def companion_spots(self, t):
+        n = len(self.info.get("subagents") or [])
+        R = self.radius
+        for i in range(n):
+            ang = t * 0.6 + i * TAU / n + self.seed
+            yield (self.x + math.cos(ang) * R * 1.9, self.y + math.sin(ang) * R * 0.55 - R * 0.15, ang)
+
+    def draw_companions(self, cr, t):
+        """Default: a shrunken copy of the creature itself in the working colour (baby jellyfish, lambs,
+        moons, ...). Themes can override this."""
+        if self.alpha < 0.05 or not self.info.get("subagents"):
+            return
+        saved = self.__dict__.copy()
+        try:
+            for x, y, ang in self.companion_spots(t):
+                self.x, self.y = x, y
+                self.vx, self.vy = -math.sin(ang) * 40 * self.scene.s, 0.0
+                self.radius = saved["radius"] * self.COMPANION_SCALE
+                self.color = COLORS["working"]
+                self.info = {"state": "working", "id": saved["info"].get("id")}
+                for attr, val in (("trail", []), ("tongue", 0.0), ("hop", 0.0), ("male", 0.0), ("graze", 0.0),
+                                  ("dig", 0.0), ("upright", 0.0), ("flicker", 1.0)):
+                    if attr in saved:
+                        setattr(self, attr, val)
+                if "face" in saved:
+                    self.face = 1.0 if self.vx >= 0 else -1.0
+                self.draw(cr, t)
+        except Exception:  # a theme detail must never break the screensaver
+            pass
+        finally:
+            self.__dict__.clear()
+            self.__dict__.update(saved)
+
     # --- shared label
     def label_layout(self, cr, show_text):
         """Build the label text. Returns (lines, sizes, width, height) or None."""
@@ -365,6 +401,11 @@ class Actor:
                 detail = f"“{info['last_text']}”"
             if detail:
                 lines.append((T.layout(cr, detail, 14 * s, Weight.NORMAL, maxw), (0.85, 0.92, 1.0), 0.8))
+        subs = info.get("subagents") or []
+        if subs:
+            names = ", ".join(a["description"] or a["type"] for a in subs)
+            lines.append((T.layout(cr, f"{len(subs)} sub-agent{'s' if len(subs) > 1 else ''}: {names}", 14 * s,
+                                   Weight.NORMAL, maxw), lighten(COLORS["working"], 0.3), 0.85))
         if info.get("cwd"):
             lines.append((T.layout(cr, info["cwd"], 13 * s, Weight.NORMAL, maxw), (0.7, 0.8, 0.9), 0.55))
 
@@ -424,6 +465,14 @@ class Walker(Actor):
     def update(self, dt, t, target):
         super().update(dt, t, target)
         self.radius *= self.depth_scale()
+
+    def companion_spots(self, t):
+        """On the ground the young ones trot along behind the parent, like ducklings."""
+        n = len(self.info.get("subagents") or [])
+        R, back = self.radius, -1.0 if self.face >= 0 else 1.0
+        for i in range(n):
+            wob = math.sin(t * 3 + i * 1.7 + self.seed) * R * 0.08
+            yield (self.x + back * R * (1.25 + i * 0.75) + wob, self.y + R * (0.25 + 0.18 * (i % 2)), 0.0)
 
     def depth_scale(self):
         sc = self.scene
@@ -575,6 +624,8 @@ class Scene:
                     a.placed = True
         t, s = self.t, self.s
         self.draw_world(cr, t)
+        for a in self.sorted_actors():
+            a.draw_companions(cr, t)
         self._draw_floaters(cr, t)
         if self.decor:
             return
@@ -810,7 +861,9 @@ class Scene:
             st = look(info)
             c = COLORS.get(st, COLORS["idle"])
             name = T.layout(cr, info.get("name", "?"), 16 * s, Weight.BOLD, 220 * s)
-            lab = T.layout(cr, f"{LABELS.get(st, st)} · {fmt_duration(time.time() - info.get('since', time.time()))}",
+            n_sub = len(info.get("subagents") or [])
+            extra = f" · +{n_sub} agent{'s' if n_sub > 1 else ''}" if n_sub else ""
+            lab = T.layout(cr, f"{LABELS.get(st, st)} · {fmt_duration(time.time() - info.get('since', time.time()))}{extra}",
                            14 * s)
             nw, nh = name.get_pixel_size()
             lw, lh = lab.get_pixel_size()

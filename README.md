@@ -14,6 +14,10 @@ Every session is one creature. The state colour is the same in every theme:
 | blocked | red | flickers |
 | background (turn finished, a background task such as a test suite still runs) | violet | moves like working; the label shows the background task |
 
+Running **sub-agents** appear as small companions in the working colour: baby jellyfish, moons, lambs,
+baby crabs, fawns, fry, meerkat pups, little pots, mini cubes, baby chameleons, seagulls over the island.
+The label lists them ("2 sub-agents: ...") and the status strip shows "+2 agents".
+
 Eleven themes rotate in random order (default every 10 minutes, fade through black):
 
 | Theme | Sessions are | Tool calls |

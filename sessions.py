@@ -150,6 +150,36 @@ def _parse_transcript(path):
     return info
 
 
+SUBAGENT_MAX_SILENCE = 600  # an unfinished sub-agent whose transcript did not change for 10 min is ignored
+
+
+def _subagents(transcript):
+    """Running sub-agents of a session: ~/.claude/projects/<p>/<session>/subagents/agent-<id>.meta.json
+    has the type, the description and a 'finished' flag; the .jsonl next to it is its transcript."""
+    if not transcript:
+        return []
+    folder = os.path.join(transcript[:-len(".jsonl")], "subagents")
+    if not os.path.isdir(folder):
+        return []
+    now = time.time()
+    out = []
+    for meta in glob.glob(os.path.join(folder, "agent-*.meta.json")):
+        log = meta[:-len(".meta.json")] + ".jsonl"
+        try:
+            if now - os.path.getmtime(log if os.path.exists(log) else meta) > SUBAGENT_MAX_SILENCE:
+                continue
+            with open(meta, encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if m.get("finished"):
+            continue
+        out.append({"id": os.path.basename(meta)[len("agent-"):-len(".meta.json")],
+                    "type": m.get("agentType") or "agent",
+                    "description": _one_line(m.get("description") or "", 60)})
+    return sorted(out, key=lambda a: a["id"])
+
+
 def read_sessions():
     """Return a list of dicts describing every live Claude Code session."""
     result = []
@@ -182,6 +212,7 @@ def read_sessions():
             "state": STATE_MAP.get(status, "idle"),
             "background": status in BACKGROUND_STATUSES,
             "bg_task": t.get("bg_task", ""),
+            "subagents": _subagents(tpath),
             "waiting_for": str(waiting_for) if waiting_for else "",
             "since": (since_ms / 1000.0) if since_ms else time.time(),
             "started": (raw.get("startedAt") or 0) / 1000.0,
@@ -241,6 +272,11 @@ def demo_sessions(t=None):
             "prompt": "Refactor the parser and add tests",
             "tool_events": events,
             "background": False, "bg_task": "",
+            # the first demo session runs sub-agents while it works (one more after a while)
+            "subagents": ([{"id": f"demo{k}", "type": "Explore", "description": d}
+                           for k, d in enumerate(("Lifecycle and catalogue mechanics", "Project and logistics code",
+                                                  "Test coverage of the parser"))][:2 + (int(t / 15) % 2)]
+                          if i == 0 and state == "working" else []),
         })
     out.append({  # a test bench: turn finished, suite still running as a background task
         "id": "demo-bg", "pid": 1099, "name": "Test bench", "cwd": "~/dev/netdocs",
@@ -249,7 +285,7 @@ def demo_sessions(t=None):
         "since": now - (t % 900) - 120, "started": now - 7200,
         "tool": "Bash", "tool_detail": "Wait for all test rows to finish",
         "last_text": "The test rows are running in the background.", "prompt": "Run the test bench",
-        "tool_events": [("bg-0", "Bash", "Wait for all test rows to finish")],
+        "tool_events": [("bg-0", "Bash", "Wait for all test rows to finish")], "subagents": [],
     })
     return out
 

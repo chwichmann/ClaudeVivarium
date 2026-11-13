@@ -13,7 +13,9 @@ import time
 
 import cairo
 
-from scene import TAU, Actor, Scene, Text, Weight, clamp, lerp, lerp3, lighten, pulse_rings
+from scene import COLORS, TAU, Actor, Scene, Text, Weight, clamp, lerp, lerp3, lighten, pulse_rings
+
+COLORS_WORKING = COLORS["working"]
 
 SKIN = (0.93, 0.74, 0.58)
 HAT = (0.86, 0.72, 0.42)
@@ -67,6 +69,34 @@ class Castaway(Actor):
         self.x = lerp(self.x, self.slot[0], k)
         self.y = lerp(self.y, self.slot[1], k)
         self.radius *= self.scene.depth_scale(self.y)
+
+    def draw_companions(self, cr, t):
+        """Sub-agents are seagulls circling above the island."""
+        subs = self.info.get("subagents") or []
+        if not subs or self.alpha < 0.05:
+            return
+        s, R, c = self.scene.s, self.radius, COLORS_WORKING
+        for i in range(len(subs)):
+            ang = t * 0.8 + i * TAU / len(subs) + self.seed
+            x = self.x + math.cos(ang) * R * 1.0
+            y = self.y - R * 1.45 + math.sin(ang) * R * 0.22
+            g = cairo.RadialGradient(x, y, 0, x, y, 22 * s)
+            g.add_color_stop_rgba(0, c[0], c[1], c[2], 0.35 * self.alpha)
+            g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
+            cr.set_source(g)
+            cr.arc(x, y, 22 * s, 0, TAU)
+            cr.fill()
+            flap = math.sin(t * 7 + i * 2) * 6 * s
+            d = -1 if math.sin(ang) > 0 else 1  # direction of flight around the circle
+            cr.set_source_rgba(0.97, 0.97, 0.97, self.alpha)
+            cr.set_line_width(2.6 * s)
+            cr.move_to(x - 15 * s, y - flap)
+            cr.curve_to(x - 8 * s, y - 9 * s, x - 3 * s, y - 4 * s, x, y)
+            cr.curve_to(x + 3 * s, y - 4 * s, x + 8 * s, y - 9 * s, x + 15 * s, y - flap)
+            cr.stroke()
+            cr.set_source_rgba(1.0, 0.75, 0.2, self.alpha)  # beak
+            cr.arc(x + d * 2 * s, y + 1 * s, 1.6 * s, 0, TAU)
+            cr.fill()
 
     # ------------------------------------------------------------------ drawing
     def draw(self, cr, t):

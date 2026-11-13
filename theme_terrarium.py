@@ -81,6 +81,15 @@ class Chameleon(Actor):
         self.tongue = max(0.0, self.tongue - dt * 2.5)
         self.eye_angle = math.sin(t * 0.9 + self.seed) * 1.2 + math.sin(t * 2.3 + self.seed * 2) * 0.4
 
+    def companion_spots(self, t):
+        if self.branch is None:
+            return
+        n = len(self.info.get("subagents") or [])
+        back = -1.0 if self.face >= 0 else 1.0
+        for i in range(n):
+            x = self.x + back * self.radius * (1.4 + i * 0.85)
+            yield (x, self.branch.y_at(x) - self.radius * self.COMPANION_SCALE * 0.5, 0.0)
+
     def strike(self, tx, ty):
         self.tongue = 1.0
         self.tongue_target = (tx, ty)
