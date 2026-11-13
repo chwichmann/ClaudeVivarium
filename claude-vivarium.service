@@ -1,0 +1,14 @@
+[Unit]
+Description=Claude Vivarium - Claude Code session screensaver (idle watcher)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Settings live in ~/.config/claude-vivarium/config.ini
+ExecStart=/usr/bin/python3 @DEST@/vivariumd.py
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
