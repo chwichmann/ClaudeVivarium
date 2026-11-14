@@ -25,7 +25,8 @@ import objc  # noqa: E402
 import Quartz  # noqa: E402
 from AppKit import (NSApplication, NSBackingStoreBuffered, NSColor, NSCursor, NSEvent, NSGraphicsContext,  # noqa
                     NSScreen, NSView, NSWindow)
-from Foundation import NSData, NSNotificationCenter, NSObject, NSRunLoop, NSTimer, NSMakeRect  # noqa: E402
+from Foundation import (NSData, NSNotificationCenter, NSObject, NSRunLoop, NSRunLoopCommonModes, NSTimer,  # noqa: E402
+                        NSMakeRect)
 
 import config  # noqa: E402
 import governor  # noqa: E402
@@ -354,7 +355,9 @@ class App:
             self.became_active = True
         timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(1.0 / FPS, self.ctrl, "tick:",
                                                                                None, True)
-        NSRunLoop.currentRunLoop().addTimer_forMode_(timer, "NSRunLoopCommonModes")
+        # the real constant ('kCFRunLoopCommonModes'): the literal string "NSRunLoopCommonModes" is not a run-loop
+        # mode, so the timer never fired (black window that ignored every key)
+        NSRunLoop.currentRunLoop().addTimer_forMode_(timer, NSRunLoopCommonModes)
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # killed -> lock first (runs on the next tick)
             signal.signal(sig, lambda *_: self.wake("signal"))
         self.nsapp.run()
