@@ -7,7 +7,7 @@ import math
 
 import cairo
 
-from scene import CLAUDE_ORANGE, TAU, Actor, Scene, Text, lerp, lighten, pulse_rings, Weight
+from scene import CLAUDE_ORANGE, TAU, Actor, Scene, Text, lerp, lighten, pulse_rings, Weight, glow
 
 OMEGA = {"working": 0.30, "idle": 0.035, "waiting": 0.02, "blocked": 0.0, "rest": 0.05}
 FLAT = 0.40  # orbits are ellipses: we look at the system from slightly above
@@ -66,12 +66,7 @@ class Planet(Actor):
             cr.line_to(*self.trail[i])
             cr.stroke()
         # glow
-        g = cairo.RadialGradient(x, y, R * 0.5, x, y, R * 2.6)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], (0.4 if self.state != "idle" else 0.22) * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(x, y, R * 2.6, 0, TAU)
-        cr.fill()
+        glow(cr, x, y, R * 2.6, c, (0.4 if self.state != "idle" else 0.22) * a, inner=0.5 / 2.6)
         if self.state == "waiting":
             pulse_rings(cr, x, y, R, c, a, t, s)
         rc = lighten(c, 0.35)

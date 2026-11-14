@@ -8,6 +8,7 @@ import math
 import cairo
 
 from scene import TAU, Actor, Scene, Text, clamp, lighten, pulse_rings, Weight
+from scene import glow as glow_sprite
 
 SPEED = {"working": 80, "idle": 20, "waiting": 45, "blocked": 10, "rest": 9}
 TURN = {"working": 1.3, "idle": 0.45, "waiting": 0.6, "blocked": 0.2, "rest": 0.25}
@@ -52,12 +53,7 @@ class Jelly(Actor):
         bw, bh = R * (1 + 0.10 * p), R * (0.80 - 0.10 * p)
 
         glow = {"working": 0.34, "waiting": 0.45, "blocked": 0.4}.get(st, 0.22)
-        g = cairo.RadialGradient(x, y - bh * 0.3, 0, x, y - bh * 0.3, R * 2.8)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], glow * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(x, y - bh * 0.3, R * 2.8, 0, TAU)
-        cr.fill()
+        glow_sprite(cr, x, y - bh * 0.3, R * 2.8, c, glow * a)
         if st == "waiting":
             pulse_rings(cr, x, y - bh * 0.3, R, c, a, t, s)
 
@@ -139,6 +135,8 @@ class Aquarium(Scene):
         self.rays = []
         self.weeds = []
         self.bg = None
+        self.bg_rays = None
+        self.rays_t = -1.0
         self.next_ambient = 0.0
 
     def on_tool(self, actor, name, index):
@@ -164,6 +162,8 @@ class Aquarium(Scene):
     def setup_world(self):
         w, h, s, rng = self.w, self.h, self.s, self.rng
         self.bg = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+        self.bg_rays = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+        self.rays_t = -1.0
         cr = cairo.Context(self.bg)
         g = cairo.LinearGradient(0, 0, 0, h)
         g.add_color_stop_rgb(0, 0.03, 0.18, 0.31)
@@ -225,9 +225,16 @@ class Aquarium(Scene):
 
     def draw_world(self, cr, t):
         s = self.s
-        cr.set_source_surface(self.bg, 0, 0)
+        # The light rays sway very slowly, so background + rays are baked into one surface that is only
+        # refreshed 10x per second (the rays cost ~4 ms per frame when drawn every frame).
+        if not (0 <= t - self.rays_t < 0.1):
+            rc = cairo.Context(self.bg_rays)
+            rc.set_source_surface(self.bg, 0, 0)
+            rc.paint()
+            self._draw_rays(rc, t)
+            self.rays_t = t
+        cr.set_source_surface(self.bg_rays, 0, 0)
         cr.paint()
-        self._draw_rays(cr, t)
         self._draw_plankton(cr, t, far=True)
         self._draw_weeds(cr, t)
         self._draw_bubbles(cr, labels=False)

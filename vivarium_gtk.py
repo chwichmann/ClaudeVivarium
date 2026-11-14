@@ -32,6 +32,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
 import config  # noqa: E402
 import gnome  # noqa: E402
+import governor  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import sysmon  # noqa: E402
 import themes  # noqa: E402
@@ -54,6 +55,9 @@ class Screensaver(Gtk.Application):
         self.was_active = False
         self.motion_origin = None
         self.last_frame = None
+        # GTK ticks at the display refresh (60 Hz or more); 30 fps is plenty, and less on a busy computer
+        self.gov = governor.Governor(base_fps=60, levels=(30, 20, 15))
+        self.update_cost = 0.0
         self.bus = None
         self.lock_deadline = 0.0
         self.win = None
@@ -70,7 +74,7 @@ class Screensaver(Gtk.Application):
         win = Gtk.ApplicationWindow(application=self, title="Claude Vivarium")
         self.win = win
         area = Gtk.DrawingArea()
-        area.set_draw_func(lambda _a, cr, w, h: self.scene.draw(cr, w, h))
+        area.set_draw_func(self.on_draw)
         area.add_tick_callback(self.on_tick)
         win.set_child(area)
 
@@ -137,11 +141,20 @@ class Screensaver(Gtk.Application):
 
     def on_tick(self, widget, clock):
         now = clock.get_frame_time() / 1e6
-        if self.last_frame is not None:
+        if self.last_frame is None:
+            self.last_frame = now
+        elif self.gov.due(now - self.last_frame):
+            t0 = time.perf_counter()
             self.scene.update(now - self.last_frame)
-        self.last_frame = now
-        widget.queue_draw()
+            self.update_cost = time.perf_counter() - t0
+            self.last_frame = now
+            widget.queue_draw()
         return True
+
+    def on_draw(self, _area, cr, w, h):
+        t0 = time.perf_counter()
+        self.scene.draw(cr, w, h)
+        self.gov.record(self.update_cost + time.perf_counter() - t0)
 
     # ---------------------------------------------------------------- input
     def in_grace(self):
@@ -238,6 +251,7 @@ class Screensaver(Gtk.Application):
 
 def main():
     cfg = config.load()
+    governor.ENABLED = cfg["adaptive_fps"]
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--windowed", action="store_true")
     ap.add_argument("--demo", action="store_true")

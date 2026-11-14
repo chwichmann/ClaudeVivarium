@@ -25,9 +25,11 @@ import objc  # noqa: E402
 import Quartz  # noqa: E402
 from AppKit import (NSApplication, NSBackingStoreBuffered, NSColor, NSCursor, NSEvent, NSGraphicsContext,  # noqa
                     NSScreen, NSView, NSWindow)
-from Foundation import NSData, NSNotificationCenter, NSObject, NSRunLoop, NSTimer, NSMakeRect  # noqa: E402
+from Foundation import (NSData, NSNotificationCenter, NSObject, NSRunLoop, NSRunLoopCommonModes, NSTimer,  # noqa: E402
+                        NSMakeRect)
 
 import config  # noqa: E402
+import governor  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import sysmon  # noqa: E402
 import themes  # noqa: E402
@@ -107,6 +109,7 @@ class Canvas:
 
     def __init__(self, view, show, every=1):
         self.view, self.show, self.every = view, show, every
+        self.gov = governor.Governor(base_fps=FPS, levels=(30, 15))  # lower frame rate when the Mac is busy
         self.size = (0, 0)
         self.img = self.cr = self.cgimage = None
         self.acc, self.frame = 0.0, 0
@@ -114,8 +117,9 @@ class Canvas:
     def render(self, dt):
         self.acc += dt
         self.frame += 1
-        if self.frame % self.every:
+        if self.frame % self.every or not self.gov.due(self.acc):
             return
+        t0 = time.perf_counter()
         dt, self.acc = self.acc, 0.0
         b = self.view.bounds()
         w, h = max(1, int(b.size.width)), max(1, int(b.size.height))
@@ -140,6 +144,8 @@ class Canvas:
             Quartz.kCGBitmapByteOrder32Little | Quartz.kCGImageAlphaNoneSkipFirst,  # Cairo's BGRx memory layout
             provider, None, False, Quartz.kCGRenderingIntentDefault)
         self.view.setNeedsDisplay_(True)
+        if self.show is not None:
+            self.gov.record(time.perf_counter() - t0)
 
 
 class Controller(NSObject):
@@ -160,6 +166,7 @@ class App:
     def __init__(self, mode, opts, cfg):
         self.mode = mode  # "full" or "windowed"
         self.opts, self.cfg = opts, cfg
+        governor.ENABLED = cfg["adaptive_fps"]
         self.started = time.monotonic()
         self.last = time.perf_counter()
         self.next_refresh = 0.0
@@ -348,7 +355,9 @@ class App:
             self.became_active = True
         timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(1.0 / FPS, self.ctrl, "tick:",
                                                                                None, True)
-        NSRunLoop.currentRunLoop().addTimer_forMode_(timer, "NSRunLoopCommonModes")
+        # the real constant ('kCFRunLoopCommonModes'): the literal string "NSRunLoopCommonModes" is not a run-loop
+        # mode, so the timer never fired (black window that ignored every key)
+        NSRunLoop.currentRunLoop().addTimer_forMode_(timer, NSRunLoopCommonModes)
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # killed -> lock first (runs on the next tick)
             signal.signal(sig, lambda *_: self.wake("signal"))
         self.nsapp.run()

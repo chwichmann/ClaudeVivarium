@@ -9,7 +9,7 @@ import math
 
 import cairo
 
-from scene import TAU, Actor, Scene, clamp, lerp, lighten, pulse_rings
+from scene import TAU, Actor, Scene, clamp, lerp, lighten, pulse_rings, glow
 
 SPEED = {"working": 38, "idle": 6, "waiting": 30, "blocked": 0, "rest": 0}
 
@@ -102,12 +102,7 @@ class Chameleon(Actor):
         R, c, st = self.radius, self.color, self.state
         if st == "waiting":
             pulse_rings(cr, self.x, self.y, R, c, a, t, s)
-        g = cairo.RadialGradient(self.x, self.y, 0, self.x, self.y, R * 2.2)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], (0.30 if st not in ("idle", "rest") else 0.15) * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(self.x, self.y, R * 2.2, 0, TAU)
-        cr.fill()
+        glow(cr, self.x, self.y, R * 2.2, c, (0.30 if st not in ("idle", "rest") else 0.15) * a)
         sleeping = st == "rest"
         dark = (c[0] * 0.45, c[1] * 0.5, c[2] * 0.4)
         cr.save()

@@ -7,7 +7,7 @@ import math
 
 import cairo
 
-from scene import MONO, TAU, Actor, Scene, Text, clamp, lighten, pulse_rings, Weight
+from scene import MONO, TAU, Actor, Scene, Text, clamp, lighten, pulse_rings, Weight, glow
 
 SPIN = {"working": 1.8, "idle": 0.35, "waiting": 0.9, "blocked": 0.05, "rest": 0.15}
 SPEED = {"working": 70, "idle": 18, "waiting": 40, "blocked": 8, "rest": 8}
@@ -63,12 +63,7 @@ class Cube(Actor):
             cr.restore()
             cr.set_source_rgba(c[0], c[1], c[2], 0.12 * a)
             cr.fill()
-        g = cairo.RadialGradient(self.x, self.y, 0, self.x, self.y, R * 2.4)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], (0.35 if self.state != "idle" else 0.18) * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(self.x, self.y, R * 2.4, 0, TAU)
-        cr.fill()
+        glow(cr, self.x, self.y, R * 2.4, c, (0.35 if self.state != "idle" else 0.18) * a)
         if self.state == "waiting":
             pulse_rings(cr, self.x, self.y, R, c, a, t, s)
         pts = self._project(R)

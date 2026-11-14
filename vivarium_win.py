@@ -29,6 +29,7 @@ sys.path.insert(0, HERE)
 import cairo  # noqa: E402
 
 import config  # noqa: E402
+import governor  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import sysmon  # noqa: E402
 import themes  # noqa: E402
@@ -181,6 +182,7 @@ class Canvas:
         self.show = show
         self.render_size = render_size
         self.every = every       # render only every n-th frame (extra monitors), dt is accumulated
+        self.gov = governor.Governor(base_fps=FPS, levels=(30, 15))  # lower frame rate when the PC is busy
         self.acc = 0.0
         self.frame = 0
         self.size = (0, 0)
@@ -209,8 +211,9 @@ class Canvas:
         self._ensure()
         self.acc += dt
         self.frame += 1
-        if self.frame % self.every:
+        if self.frame % self.every or not self.gov.due(self.acc):
             return
+        t0 = time.perf_counter()
         dt, self.acc = self.acc, 0.0
         if self.show is None:  # black monitor: paint once
             if self.painted_black:
@@ -222,6 +225,8 @@ class Canvas:
             self.show.update(dt)
             self.show.draw(self.cr, *self.img_size)
         self.blit()
+        if self.show is not None:
+            self.gov.record(time.perf_counter() - t0)
 
     def blit(self):
         self.img.flush()
@@ -243,6 +248,7 @@ class App:
         self.mode = mode          # "full", "preview", "windowed"
         self.opts = opts
         self.cfg = cfg
+        governor.ENABLED = cfg["adaptive_fps"]
         self.parent = parent
         self.running = True
         self.started = time.monotonic()
