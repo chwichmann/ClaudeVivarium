@@ -111,6 +111,40 @@ def pulse_rings(cr, x, y, R, c, a, t, s):
         cr.stroke()
 
 
+_GLOW_SPRITES = {}
+
+
+def glow(cr, x, y, r, c, alpha):
+    """Soft radial glow: colour c, opacity `alpha` in the centre fading linearly to 0 at radius r.
+
+    Same picture as a two-stop RadialGradient + arc + fill, but the gradient is rendered once into a
+    small sprite per (colour, size) and then only blitted - about 15x cheaper than filling a gradient.
+    The sprite size is rounded to steps of 6 px and scaled by the (tiny) remainder."""
+    if alpha <= 0.004 or r < 1:
+        return
+    rq = max(6, int(round(r / 6.0)) * 6)
+    key = (round(c[0], 2), round(c[1], 2), round(c[2], 2), rq)
+    sp = _GLOW_SPRITES.get(key)
+    if sp is None:
+        if len(_GLOW_SPRITES) > 128:  # colours can animate; never let the cache grow without bound
+            _GLOW_SPRITES.clear()
+        sp = cairo.ImageSurface(cairo.FORMAT_ARGB32, 2 * rq, 2 * rq)
+        sc = cairo.Context(sp)
+        g = cairo.RadialGradient(rq, rq, 0, rq, rq, rq)
+        g.add_color_stop_rgba(0, key[0], key[1], key[2], 1.0)
+        g.add_color_stop_rgba(1, key[0], key[1], key[2], 0.0)
+        sc.set_source(g)
+        sc.paint()
+        _GLOW_SPRITES[key] = sp
+    k = r / rq
+    cr.save()
+    cr.translate(x, y)
+    cr.scale(k, k)
+    cr.set_source_surface(sp, -rq, -rq)
+    cr.paint_with_alpha(alpha)
+    cr.restore()
+
+
 class PangoText:
     """Text via Pango (Linux)."""
 
@@ -692,13 +726,25 @@ class Scene:
         w, h = self.SYS_W * s, self.SYS_H * s
         return self.w - w - 28 * s + ox, 24 * s + oy, w, h
 
+    _sys_cache = None  # (key, surface) - the panel only changes when a new sample arrives
+
     def _draw_sysmon(self, cr, t):
-        """Small task-manager panel: CPU % and memory GB with a 30-minute graph each."""
+        """Small task-manager panel: CPU % and memory GB with a 30-minute graph each.
+        Rendered into a surface once per new sample and then blitted (at whole pixels) every frame."""
         d = self.system
         if not d or not d.get("cpu"):
             return
-        s, T = self.s, self.text
         x, y, w, h = self._sysmon_rect()
+        key = (d.get("time"), len(d["cpu"]), d["cpu"][-1], d["mem"][-1] if d.get("mem") else 0, self.s)
+        if self._sys_cache is None or self._sys_cache[0] != key:
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(w) + 4, int(h) + 4)
+            self._paint_sysmon(cairo.Context(surf), 2, 2, w, h, d)
+            self._sys_cache = (key, surf)
+        cr.set_source_surface(self._sys_cache[1], round(x) - 2, round(y) - 2)
+        cr.paint()
+
+    def _paint_sysmon(self, cr, x, y, w, h, d):
+        s, T = self.s, self.text
         cr.set_source_rgba(0.02, 0.03, 0.06, 0.62)
         rounded_rect(cr, x, y, w, h, 12 * s)
         cr.fill()

@@ -8,7 +8,7 @@ import math
 
 import cairo
 
-from scene import TAU, Scene, Walker, lerp, pulse_rings
+from scene import TAU, Scene, Walker, lerp, pulse_rings, glow
 
 BODY = (0.06, 0.05, 0.05)
 
@@ -115,12 +115,7 @@ class Deer(Walker):
         if a < 0.01:
             return
         R, c, st = self.radius, self.color, self.state
-        g = cairo.RadialGradient(self.x, self.y, 0, self.x, self.y, R * 2.4)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], (0.3 if st != "idle" else 0.16) * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(self.x, self.y, R * 2.4, 0, TAU)
-        cr.fill()
+        glow(cr, self.x, self.y, R * 2.4, c, (0.3 if st != "idle" else 0.16) * a)
         if st == "waiting":
             pulse_rings(cr, self.x, self.y - R * 0.2, R, c, a, t, s)
         cr.save()

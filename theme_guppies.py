@@ -9,7 +9,7 @@ import math
 
 import cairo
 
-from scene import TAU, Actor, Scene, clamp, lerp, lerp3, lighten, pulse_rings
+from scene import TAU, Actor, Scene, clamp, lerp, lerp3, lighten, pulse_rings, glow
 
 SPEED = {"working": 110, "idle": 32, "waiting": 60, "blocked": 8, "rest": 10}
 TURN = {"working": 1.6, "idle": 0.6, "waiting": 0.5, "blocked": 0.2, "rest": 0.3}
@@ -50,12 +50,7 @@ class Guppy(Actor):
         R, c, st, m = self.radius, self.color, self.state, self.male
         if st == "waiting":
             pulse_rings(cr, self.x, self.y, R, c, a, t, s)
-        g = cairo.RadialGradient(self.x, self.y, 0, self.x, self.y, R * 2.2)
-        g.add_color_stop_rgba(0, c[0], c[1], c[2], (0.30 if st != "idle" else 0.16) * a)
-        g.add_color_stop_rgba(1, c[0], c[1], c[2], 0)
-        cr.set_source(g)
-        cr.arc(self.x, self.y, R * 2.2, 0, TAU)
-        cr.fill()
+        glow(cr, self.x, self.y, R * 2.2, c, (0.30 if st != "idle" else 0.16) * a)
 
         cr.save()
         cr.translate(self.x, self.y)
