@@ -52,10 +52,15 @@ system_monitor = true
 
 # Further monitors: theme = another theme with the same creatures (no labels), black = dark
 other_monitors = theme
+
+# true = on a busy computer lower the frame rate (30 -> 20 -> 15 fps) so the animation stays even and
+# leaves CPU to your work; it goes back up when the computer calms down. false = always full speed.
+adaptive_fps = true
 """
 
 DEFAULTS = {"idle_seconds": 240, "max_minutes": 0.0, "mouse_move": "hint", "hide_text": False,
-            "themes": "all", "theme_minutes": 10.0, "system_monitor": True, "other_monitors": "theme"}
+            "themes": "all", "theme_minutes": 10.0, "system_monitor": True, "other_monitors": "theme",
+            "adaptive_fps": True}
 
 
 def load():
@@ -85,6 +90,7 @@ def load():
     cfg["mouse_move"] = mm if mm in ("hint", "wake") else "hint"
     cfg["hide_text"] = str(sec.get("hide_text", "false")).strip().lower() in ("1", "true", "yes", "on")
     cfg["system_monitor"] = str(sec.get("system_monitor", "true")).strip().lower() in ("1", "true", "yes", "on")
+    cfg["adaptive_fps"] = str(sec.get("adaptive_fps", "true")).strip().lower() in ("1", "true", "yes", "on")
     cfg["themes"] = str(sec.get("themes", cfg["themes"])).strip() or "all"
     om = str(sec.get("other_monitors", "theme")).strip().lower()
     cfg["other_monitors"] = om if om in ("theme", "black") else "theme"

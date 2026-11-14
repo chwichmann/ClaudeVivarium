@@ -114,8 +114,10 @@ def pulse_rings(cr, x, y, R, c, a, t, s):
 _GLOW_SPRITES = {}
 
 
-def glow(cr, x, y, r, c, alpha):
+def glow(cr, x, y, r, c, alpha, inner=0.0):
     """Soft radial glow: colour c, opacity `alpha` in the centre fading linearly to 0 at radius r.
+    `inner` (0..1, fraction of r) keeps the opacity flat up to that radius before it fades.
+    Worth it for big round glows; small flat ellipses (glow on the ground) are cheaper to fill directly.
 
     Same picture as a two-stop RadialGradient + arc + fill, but the gradient is rendered once into a
     small sprite per (colour, size) and then only blitted - about 15x cheaper than filling a gradient.
@@ -123,7 +125,7 @@ def glow(cr, x, y, r, c, alpha):
     if alpha <= 0.004 or r < 1:
         return
     rq = max(6, int(round(r / 6.0)) * 6)
-    key = (round(c[0], 2), round(c[1], 2), round(c[2], 2), rq)
+    key = (round(c[0], 2), round(c[1], 2), round(c[2], 2), rq, round(inner, 2))
     sp = _GLOW_SPRITES.get(key)
     if sp is None:
         if len(_GLOW_SPRITES) > 128:  # colours can animate; never let the cache grow without bound
@@ -132,6 +134,8 @@ def glow(cr, x, y, r, c, alpha):
         sc = cairo.Context(sp)
         g = cairo.RadialGradient(rq, rq, 0, rq, rq, rq)
         g.add_color_stop_rgba(0, key[0], key[1], key[2], 1.0)
+        if key[4] > 0:
+            g.add_color_stop_rgba(key[4], key[0], key[1], key[2], 1.0)
         g.add_color_stop_rgba(1, key[0], key[1], key[2], 0.0)
         sc.set_source(g)
         sc.paint()

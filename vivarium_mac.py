@@ -28,6 +28,7 @@ from AppKit import (NSApplication, NSBackingStoreBuffered, NSColor, NSCursor, NS
 from Foundation import NSData, NSNotificationCenter, NSObject, NSRunLoop, NSTimer, NSMakeRect  # noqa: E402
 
 import config  # noqa: E402
+import governor  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import sysmon  # noqa: E402
 import themes  # noqa: E402
@@ -107,6 +108,7 @@ class Canvas:
 
     def __init__(self, view, show, every=1):
         self.view, self.show, self.every = view, show, every
+        self.gov = governor.Governor(base_fps=FPS, levels=(30, 15))  # lower frame rate when the Mac is busy
         self.size = (0, 0)
         self.img = self.cr = self.cgimage = None
         self.acc, self.frame = 0.0, 0
@@ -114,8 +116,9 @@ class Canvas:
     def render(self, dt):
         self.acc += dt
         self.frame += 1
-        if self.frame % self.every:
+        if self.frame % self.every or not self.gov.due(self.acc):
             return
+        t0 = time.perf_counter()
         dt, self.acc = self.acc, 0.0
         b = self.view.bounds()
         w, h = max(1, int(b.size.width)), max(1, int(b.size.height))
@@ -140,6 +143,8 @@ class Canvas:
             Quartz.kCGBitmapByteOrder32Little | Quartz.kCGImageAlphaNoneSkipFirst,  # Cairo's BGRx memory layout
             provider, None, False, Quartz.kCGRenderingIntentDefault)
         self.view.setNeedsDisplay_(True)
+        if self.show is not None:
+            self.gov.record(time.perf_counter() - t0)
 
 
 class Controller(NSObject):
@@ -160,6 +165,7 @@ class App:
     def __init__(self, mode, opts, cfg):
         self.mode = mode  # "full" or "windowed"
         self.opts, self.cfg = opts, cfg
+        governor.ENABLED = cfg["adaptive_fps"]
         self.started = time.monotonic()
         self.last = time.perf_counter()
         self.next_refresh = 0.0

@@ -47,6 +47,7 @@ a transcript `~/.claude/projects/*/<sessionId>.jsonl`. Claude Vivarium only **re
 sessions.py        reads session state + recent tool calls        (all platforms)
 sysmon.py          CPU / memory history                            (all platforms)
 config.py          settings file                                   (all platforms)
+governor.py        adaptive frame rate on a busy computer          (all platforms)
 scene.py           shared drawing: labels, banner, strip, panel    (all platforms, Cairo)
 theme_*.py         one file per theme                              (all platforms)
 themes.py          theme registry + random rotation                (all platforms)
@@ -57,6 +58,7 @@ vivarium_win.py    Windows: the .scr screensaver (/s /p /c), recorder, installer
 vivarium_mac.py    macOS: full-screen windows via PyObjC, locks on wake, --selftest
 vivariumd_mac.py   macOS: idle agent (LaunchAgent) + CPU/memory recorder
 render_preview.py  render themes to PNG without a display (testing)
+benchmark.py       time update()/draw() per theme, optional cProfile (performance work)
 ```
 
 ### Linux (Ubuntu, GNOME on Wayland)
@@ -109,6 +111,7 @@ themes = all           # all | one theme | comma list, e.g. pasture, seabed, for
 theme_minutes = 10     # minutes per theme, 0 = never switch
 system_monitor = true  # CPU/memory panel top right
 other_monitors = theme # theme | black  (Windows, further monitors)
+adaptive_fps = true    # lower the frame rate (30 -> 20/15 fps) while the computer is busy, back up when calm
 ```
 
 ## Install
