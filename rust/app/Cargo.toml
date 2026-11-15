@@ -1,0 +1,16 @@
+[package]
+name = "claude-vivarium"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "claude-vivarium-rs"
+path = "src/main.rs"
+
+[dependencies]
+vivarium-core = { path = "../core" }
+vivarium-themes = { path = "../themes" }
+vello = "0.12"
+pollster = "1"
+png = "0.18"

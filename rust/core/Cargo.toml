@@ -1,0 +1,12 @@
+[package]
+name = "vivarium-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kurbo = "0.13"
+cosmic-text = "0.19"
+serde_json = "1"
+zeno = { version = "0.3.3", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
