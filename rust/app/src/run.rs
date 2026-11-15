@@ -13,7 +13,7 @@ use vivarium_core::canvas::Canvas;
 use vivarium_core::governor::{Governor, LEVELS};
 use vivarium_core::scene::SceneOpts;
 use vivarium_core::sessions::{self, Reader};
-use vivarium_core::show::{parse_rotation, Show};
+use vivarium_core::show::{parse_rotation, PickerKey, Show};
 use vivarium_core::sysmon::{self, Monitor};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -28,7 +28,7 @@ use crate::platform::{self, log, Platform};
 
 const GRACE: f64 = 1.0; // s after start during which input is ignored (avoids instant wake)
 const MOTION_THRESHOLD: f64 = 25.0; // px of mouse movement that counts as "wake up"
-const HINT: &str = "Press a key or click to unlock   ·   → next theme";
+const HINT: &str = "Press a key or click to unlock   ·   → next theme   ·   ↓ all themes";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mode {
@@ -62,6 +62,8 @@ pub struct Options {
     /// save every window as PNG after this many seconds into this folder, then exit (testing)
     pub shot: Option<(f64, PathBuf)>,
     pub seed: Option<u64>,
+    /// open the theme picker right at the start (testing, screenshots)
+    pub open_picker: bool,
     /// "gpu", "cpu" or None for automatic
     pub renderer: Option<String>,
 }
@@ -143,7 +145,7 @@ impl App {
     fn make_show(&self, decor: bool, avoid: Option<&str>) -> Show {
         let names = parse_rotation(&self.o.themes, vivarium_themes::NAMES, &vivarium_themes::resting());
         let opts = SceneOpts { show_text: !self.o.hide_text, decor, seed: self.o.seed };
-        Show::new(factory, names, self.o.theme_minutes, opts, avoid)
+        Show::new(factory, names, vivarium_themes::NAMES, self.o.theme_minutes, opts, avoid)
     }
 
     fn add_view(&mut self, window: Window, show: Option<Show>, virtual_size: Option<(f64, f64)>) -> Result<(), String> {
@@ -498,11 +500,43 @@ impl App {
     }
 
     // ------------------------------------------------------------------ input
+    /// Keys of the theme picker. Returns true if the key was used (so it must not wake or close).
+    fn picker_key(&mut self, key: &Key) -> bool {
+        let Some(show) = self.views.first_mut().and_then(|v| v.show.as_mut()) else { return false };
+        let t = matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("t"));
+        let named = match key {
+            Key::Named(n) => Some(*n),
+            _ => None,
+        };
+        if !show.picker_open() {
+            // Down, Up, Tab or T: show all themes to choose from
+            if t || matches!(named, Some(NamedKey::ArrowDown | NamedKey::ArrowUp | NamedKey::Tab)) {
+                show.open_picker();
+                return true;
+            }
+            return false;
+        }
+        match named {
+            Some(NamedKey::ArrowLeft) => show.picker_move(PickerKey::Left),
+            Some(NamedKey::ArrowRight) => show.picker_move(PickerKey::Right),
+            Some(NamedKey::ArrowUp) => show.picker_move(PickerKey::Up),
+            Some(NamedKey::ArrowDown) => show.picker_move(PickerKey::Down),
+            Some(NamedKey::Enter | NamedKey::Space) => show.picker_choose(),
+            Some(NamedKey::Escape) => show.close_picker(),
+            _ if t => show.close_picker(),
+            _ => {} // other keys do nothing while choosing (the picker closes by itself after a while)
+        }
+        true
+    }
+
     fn on_key(&mut self, key: &Key) {
         let next = matches!(key, Key::Named(NamedKey::ArrowRight));
         match self.o.mode {
             Mode::Preview(_) => {}
             Mode::Windowed => {
+                if self.picker_key(key) {
+                    return;
+                }
                 let n = matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("n"));
                 if matches!(key, Key::Named(NamedKey::Escape)) {
                     self.finish(0);
@@ -515,12 +549,18 @@ impl App {
                 }
             }
             Mode::Full => {
+                if self.in_grace() {
+                    return;
+                }
+                if self.picker_key(key) {
+                    return;
+                }
                 if next {
                     // right arrow = next theme, any other key wakes (and locks)
                     if let Some(s) = self.views.first_mut().and_then(|v| v.show.as_mut()) {
                         s.next_theme();
                     }
-                } else if !self.in_grace() {
+                } else {
                     self.wake("key");
                 }
             }
@@ -589,6 +629,14 @@ impl ApplicationHandler for App {
             eprintln!("claude-vivarium: {e}");
             self.os.end();
             std::process::exit(2); // the idle watcher locks if the screen is not locked
+        }
+        if self.o.open_picker {
+            self.refresh();
+            let t0 = Instant::now();
+            if let Some(show) = self.views.first_mut().and_then(|v| v.show.as_mut()) {
+                show.open_picker();
+            }
+            log(&format!("theme picker prepared in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
         }
         self.started = Instant::now();
         self.last_frame = Instant::now();

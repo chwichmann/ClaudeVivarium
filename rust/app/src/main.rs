@@ -29,7 +29,8 @@ Claude Vivarium (Rust version)
 
   claude-vivarium-rs run                      full screen, locks the screen on any key or click
   claude-vivarium-rs run --windowed --demo    preview in a window with made-up sessions
-                                              (N / Right / Space = next theme, Esc = close)
+                                              (N / Right / Space = next theme, Down = choose a theme,
+                                              Esc = close)
       --themes all|name|a,b|all,-x   --theme-minutes N   --hide-text   --max-minutes N
       --mouse-move hint|wake         --no-system-monitor --no-lock (close without locking)
       --renderer gpu|cpu             default: GPU, or CPU when there is no real graphics card
@@ -71,6 +72,7 @@ fn options(args: &Args, cfg: &Config, mode: Mode) -> Result<Options, String> {
         bench: None,
         shot,
         seed: None,
+        open_picker: args.flag("--picker"),
     })
 }
 
