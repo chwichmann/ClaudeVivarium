@@ -23,6 +23,9 @@ not known yet.
 
 ## What is different from the Python version
 
+- New theme **gorillas**: gorillas in a misty jungle. Fur stays dark; the state colour is a rim light,
+  a glow and a tint on the back. Working ones knuckle-walk and now and then climb a tree and swing on a
+  liana to the next; a tool call makes them beat their chest; sub-agents are babies.
 - New theme **penguins**: penguins on an ice floe under an aurora. The state colour is each penguin's
   scarf and hat; working ones waddle and slide on their bellies, a tool call makes a fish leap from a
   fishing hole, sub-agents are grey chicks.

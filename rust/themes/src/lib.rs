@@ -5,6 +5,7 @@ pub mod aquarium;
 pub mod archipelago;
 pub mod espresso;
 pub mod forest;
+pub mod gorillas;
 pub mod guppies;
 pub mod meerkats;
 pub mod pasture;
@@ -50,6 +51,7 @@ registry! {
     "meerkats" => meerkats::Meerkats,
     "espresso" => espresso::Espresso,
     "archipelago" => archipelago::Archipelago,
+    "gorillas" => gorillas::Gorillas,
     "penguins" => penguins::Penguins,
     "workshop" => workshop::Workshop,
 }
