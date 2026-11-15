@@ -73,6 +73,7 @@ jobs:
             rust/install-mac.sh
             rust/install-linux.sh
             rust/test-windows.cmd
+            rust/test-linux.sh
             rust/claude-vivarium-rs.service
             rust/preview/*.png
           if-no-files-found: warn

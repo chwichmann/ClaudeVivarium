@@ -65,6 +65,9 @@ then closes (right arrow = next theme). Options: `--themes`, `--theme-minutes`, 
 `--max-minutes`, `--mouse-move hint|wake`, `--no-system-monitor`, `--no-lock`.
 `VIVARIUM_TEST="8;/tmp/shots"` saves every window as PNG after 8 s and exits.
 
+`test-linux.sh` (Linux, macOS) and `test-windows.cmd` run these checks in one go next to the program
+and collect a log and screenshots in a `vivarium-test` folder; they install nothing and do not lock.
+
 ## Install
 
 ### macOS
