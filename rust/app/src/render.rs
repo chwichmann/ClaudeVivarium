@@ -4,14 +4,13 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use vivarium_core::canvas::Canvas;
 use vivarium_core::scene::SceneOpts;
 use vivarium_core::sessions::{self, Reader};
 use vivarium_core::show::parse_list;
 use vivarium_core::sysmon;
 
 use crate::args::Args;
-use crate::gpu::{write_png, Gpu, VelloSink};
+use crate::gpu::{choose, write_png, Offscreen};
 
 /// render --demo --sysmon --themes all --times 6,24 --size 1920x1200 --out preview
 /// (--empty: no sessions, shows the resting creature; --decor: the extra-monitor look)
@@ -24,8 +23,9 @@ pub fn render(args: &Args) -> Result<(), String> {
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let demo = args.flag("--demo");
     let empty = args.flag("--empty"); // no sessions: shows the resting creature
-    let mut gpu = Gpu::new();
-    let mut sink = VelloSink::new();
+    let (kind, why) = choose(args.value("--renderer"));
+    println!("{why}");
+    let mut off = Offscreen::new(kind);
     let mut reader = Reader::new();
     for name in parse_list(args.value("--themes").unwrap_or("all"), vivarium_themes::NAMES) {
         let mut scene = vivarium_themes::make(name, SceneOpts { show_text: !args.flag("--hide-text"), decor: args.flag("--decor"), seed: Some(1) })
@@ -33,13 +33,10 @@ pub fn render(args: &Args) -> Result<(), String> {
         if args.flag("--sysmon") {
             scene.set_system(Some(Rc::new(sysmon::fake())));
         }
-        let frame_scene = |scene: &mut Box<dyn vivarium_core::scene::Scene>, sink: &mut VelloSink| {
-            sink.begin();
-            let mut cr = Canvas::new(sink);
-            scene.draw(&mut cr, w as f64, h as f64);
-            cr.finish();
+        let frame_scene = |scene: &mut Box<dyn vivarium_core::scene::Scene>, off: &mut Offscreen| {
+            off.frame(w, h, |cr| scene.draw(cr, w as f64, h as f64));
         };
-        frame_scene(&mut scene, &mut sink);
+        frame_scene(&mut scene, &mut off);
         let dt = 1.0 / fps as f64;
         let (mut sim, mut frame) = (0.0, 0usize);
         let mut build: Vec<f64> = Vec::new();
@@ -59,22 +56,22 @@ pub fn render(args: &Args) -> Result<(), String> {
                 frame += 1;
                 if frame % 10 == 0 {
                     let t0 = Instant::now();
-                    frame_scene(&mut scene, &mut sink);
+                    frame_scene(&mut scene, &mut off);
                     build.push(t0.elapsed().as_secs_f64());
                 }
             }
-            frame_scene(&mut scene, &mut sink);
+            frame_scene(&mut scene, &mut off);
             let t0 = Instant::now();
-            let pixels = gpu.render_pixels(&sink.scene, w, h)?;
+            let pixels = off.pixels(w, h)?;
             let gpu_ms = t0.elapsed().as_secs_f64() * 1000.0;
             let path = out.join(format!("{name}_{target:04.1}s.png"));
             write_png(&path, &pixels, w, h)?;
-            println!("{}   (render + read back {gpu_ms:.1} ms)", path.display());
+            println!("{}   (finishing the picture {gpu_ms:.1} ms)", path.display());
         }
         if !build.is_empty() {
             let avg = build.iter().sum::<f64>() / build.len() as f64 * 1000.0;
             let max = build.iter().cloned().fold(0.0, f64::max) * 1000.0;
-            println!("{name}: building a frame on the CPU avg {avg:.2} ms, max {max:.2} ms");
+            println!("{name}: building a frame avg {avg:.2} ms, max {max:.2} ms");
         }
     }
     Ok(())

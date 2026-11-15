@@ -161,12 +161,6 @@ impl Gpu {
         Ok(self.renderers[dev_id].as_mut().expect("just created"))
     }
 
-    /// Name of the graphics adapter in use (for the log).
-    pub fn adapter_name(&self, dev_id: usize) -> String {
-        let info = self.ctx.devices[dev_id].adapter().get_info();
-        format!("{} ({:?})", info.name, info.backend)
-    }
-
     pub fn create_surface<'w>(
         &mut self,
         target: impl Into<wgpu::SurfaceTarget<'w>>,
@@ -278,4 +272,96 @@ pub fn write_png(path: &std::path::Path, pixels: &[u8], width: u32, height: u32)
     enc.set_depth(png::BitDepth::Eight);
     let mut w = enc.write_header().map_err(|e| e.to_string())?;
     w.write_image_data(pixels).map_err(|e| e.to_string())
+}
+
+/// Which renderer draws the frames.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Gpu,
+    Cpu,
+}
+
+fn instance() -> wgpu::Instance {
+    wgpu::Instance::new(wgpu::InstanceDescriptor {
+        display: None,
+        backends: wgpu::Backends::from_env().unwrap_or_default(),
+        flags: wgpu::InstanceFlags::from_build_config().with_env(),
+        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        backend_options: wgpu::BackendOptions::from_env_or_default(),
+    })
+}
+
+/// Every graphics adapter the system offers, as text (for the self test).
+pub fn adapters() -> Vec<String> {
+    pollster::block_on(instance().enumerate_adapters(wgpu::Backends::all()))
+        .iter()
+        .map(|a| {
+            let i = a.get_info();
+            format!("{} ({:?}, {:?})", i.name, i.backend, i.device_type)
+        })
+        .collect()
+}
+
+/// Pick the renderer. `wanted`: "gpu", "cpu" or anything else for automatic.
+/// Automatic takes the GPU unless the system has none or only offers a software stand-in for one
+/// (virtual machines, remote desktop) - drawing on the CPU directly is faster and more reliable there.
+pub fn choose(wanted: Option<&str>) -> (Kind, String) {
+    let env = std::env::var("VIVARIUM_RENDERER").ok();
+    match wanted.or(env.as_deref()).map(|w| w.trim().to_lowercase()).as_deref() {
+        Some("gpu") => return (Kind::Gpu, "GPU renderer (as requested)".into()),
+        Some("cpu") => return (Kind::Cpu, "CPU renderer (as requested)".into()),
+        _ => {}
+    }
+    match pollster::block_on(instance().request_adapter(&wgpu::RequestAdapterOptions::default())) {
+        Err(_) => (Kind::Cpu, "CPU renderer (no graphics adapter found)".into()),
+        Ok(a) => {
+            let i = a.get_info();
+            if i.device_type == wgpu::DeviceType::Cpu {
+                (Kind::Cpu, format!("CPU renderer (only a software graphics adapter: {})", i.name))
+            } else {
+                (Kind::Gpu, format!("GPU renderer on {} ({:?})", i.name, i.backend))
+            }
+        }
+    }
+}
+
+/// Draws frames without a window, with either renderer (PNG output, self test).
+#[allow(clippy::large_enum_variant)] // there is only ever one of these
+pub enum Offscreen {
+    Gpu(Box<Gpu>, VelloSink),
+    Cpu(crate::cpu::CpuSink),
+}
+
+impl Offscreen {
+    pub fn new(kind: Kind) -> Self {
+        match kind {
+            Kind::Gpu => Offscreen::Gpu(Box::new(Gpu::new()), VelloSink::new()),
+            Kind::Cpu => Offscreen::Cpu(crate::cpu::CpuSink::new()),
+        }
+    }
+
+    /// Build one frame; `draw` paints into the canvas.
+    pub fn frame(&mut self, width: u32, height: u32, draw: impl FnOnce(&mut vivarium_core::canvas::Canvas)) {
+        let sink: &mut dyn Sink = match self {
+            Offscreen::Gpu(_, sink) => {
+                sink.begin();
+                sink
+            }
+            Offscreen::Cpu(sink) => {
+                sink.begin(width, height);
+                sink
+            }
+        };
+        let mut cr = vivarium_core::canvas::Canvas::new(sink);
+        draw(&mut cr);
+        cr.finish();
+    }
+
+    /// The pixels of the frame built last (RGBA, top row first).
+    pub fn pixels(&mut self, width: u32, height: u32) -> Result<Vec<u8>, String> {
+        match self {
+            Offscreen::Gpu(gpu, sink) => gpu.render_pixels(&sink.scene, width, height),
+            Offscreen::Cpu(sink) => Ok(sink.pixels().to_vec()),
+        }
+    }
 }

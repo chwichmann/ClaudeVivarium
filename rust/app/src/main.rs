@@ -11,6 +11,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod args;
+mod cpu;
 mod gpu;
 mod platform;
 mod render;
@@ -31,6 +32,7 @@ Claude Vivarium (Rust version)
                                               (N / Right / Space = next theme, Esc = close)
       --themes all|name|a,b|all,-x   --theme-minutes N   --hide-text   --max-minutes N
       --mouse-move hint|wake         --no-system-monitor --no-lock (close without locking)
+      --renderer gpu|cpu             default: GPU, or CPU when there is no real graphics card
   claude-vivarium-rs daemon [--idle SECONDS] [--now]   idle watcher (Linux, macOS)
   claude-vivarium-rs selftest [--out DIR]     check fonts, sessions, graphics; write PNGs of all themes
   claude-vivarium-rs sessions [--demo] [--watch]
@@ -65,6 +67,7 @@ fn options(args: &Args, cfg: &Config, mode: Mode) -> Result<Options, String> {
         fps: args.num("--fps", vivarium_core::governor::FPS as f64)?.clamp(1.0, 240.0) as u32,
         window_size: args.size("--size", (1280, 800))?,
         window_physical: false,
+        renderer: args.value("--renderer").map(str::to_string),
         bench: None,
         shot,
         seed: None,
@@ -116,11 +119,19 @@ fn selftest(args: &Args) -> Result<(), String> {
     for line in platform::os::selftest_lines() {
         println!("{line}");
     }
-    let mut gpu = gpu::Gpu::new();
-    match gpu.render_pixels(&vello::Scene::new(), 64, 64) {
-        Ok(_) => println!("graphics: {}", gpu.adapter_name(0)),
-        Err(e) => println!("graphics: NOT usable - {e}"),
+    for a in gpu::adapters() {
+        println!("graphics adapter: {a}");
     }
+    let (kind, why) = gpu::choose(args.value("--renderer"));
+    println!("drawing with: {why}");
+    let mut off = gpu::Offscreen::new(kind);
+    off.frame(64, 64, |_| {});
+    match off.pixels(64, 64) {
+        Ok(_) => println!("test picture: ok"),
+        Err(e) => println!("test picture: FAILED - {e}"),
+    }
+    drop(off);
+    let renderer = if kind == gpu::Kind::Cpu { "cpu" } else { "gpu" };
     let list = vec![
         "render".to_string(),
         "--demo".into(),
@@ -133,6 +144,8 @@ fn selftest(args: &Args) -> Result<(), String> {
         "1600x1000".into(),
         "--out".into(),
         out.to_string_lossy().to_string(),
+        "--renderer".into(),
+        renderer.into(),
     ];
     render::render(&Args::new(list))?;
     println!("PNGs written to {}", out.display());

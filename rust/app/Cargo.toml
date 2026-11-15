@@ -16,6 +16,8 @@ pollster = "1"
 png = "0.18"
 winit = "0.30"
 raw-window-handle = "0.6"
+tiny-skia = "0.12"
+softbuffer = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

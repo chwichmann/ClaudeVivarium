@@ -22,7 +22,8 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::gpu::{write_png, Gpu, VelloSink};
+use crate::cpu::CpuScreen;
+use crate::gpu::{choose, write_png, Gpu, Kind, VelloSink};
 use crate::platform::{self, log, Platform};
 
 const GRACE: f64 = 1.0; // s after start during which input is ignored (avoids instant wake)
@@ -61,11 +62,18 @@ pub struct Options {
     /// save every window as PNG after this many seconds into this folder, then exit (testing)
     pub shot: Option<(f64, PathBuf)>,
     pub seed: Option<u64>,
+    /// "gpu", "cpu" or None for automatic
+    pub renderer: Option<String>,
+}
+
+enum Screen {
+    Gpu(Box<RenderSurface<'static>>),
+    Cpu(Box<CpuScreen>),
 }
 
 struct View {
     window: Arc<Window>,
-    surface: RenderSurface<'static>,
+    screen: Screen,
     show: Option<Show>,
     focused: bool,
     /// draw the scene as if the window had this size and scale it down (tiny preview window)
@@ -88,6 +96,7 @@ struct Bench {
 struct App {
     o: Options,
     os: Box<dyn Platform>,
+    kind: Kind,
     gpu: Gpu,
     sink: VelloSink,
     views: Vec<View>,
@@ -140,12 +149,12 @@ impl App {
     fn add_view(&mut self, window: Window, show: Option<Show>, virtual_size: Option<(f64, f64)>) -> Result<(), String> {
         let window = Arc::new(window);
         let size = window.inner_size();
-        let surface = self.gpu.create_surface(window.clone(), size.width, size.height)?;
-        if self.views.is_empty() {
-            log(&format!("graphics: {}", self.gpu.adapter_name(surface.dev_id)));
-        }
+        let screen = match self.kind {
+            Kind::Gpu => Screen::Gpu(Box::new(self.gpu.create_surface(window.clone(), size.width, size.height)?)),
+            Kind::Cpu => Screen::Cpu(Box::new(CpuScreen::new(window.clone())?)),
+        };
         self.os.window_created(&window, self.full());
-        self.views.push(View { window, surface, show, focused: false, virtual_size });
+        self.views.push(View { window, screen, show, focused: false, virtual_size });
         Ok(())
     }
 
@@ -411,18 +420,29 @@ impl App {
         el.set_control_flow(ControlFlow::WaitUntil(self.due.max(now + Duration::from_millis(1))));
     }
 
+    /// Build the frame of one window in its renderer. Returns the size of the window in pixels.
     fn build(sink: &mut VelloSink, v: &mut View) -> (u32, u32) {
         let size = v.window.inner_size();
         let (w, h) = (size.width.max(1), size.height.max(1));
-        sink.begin();
+        // the CPU renderer may draw a big window at half size
+        let (dw, dh, sink): (u32, u32, &mut dyn vivarium_core::canvas::Sink) = match &mut v.screen {
+            Screen::Gpu(_) => {
+                sink.begin();
+                (w, h, sink)
+            }
+            Screen::Cpu(c) => {
+                let (dw, dh) = c.begin(w, h);
+                (dw, dh, &mut c.sink)
+            }
+        };
         if let Some(show) = v.show.as_mut() {
             let mut cr = Canvas::new(sink);
             match v.virtual_size {
                 Some((vw, vh)) => {
-                    cr.scale(w as f64 / vw, h as f64 / vh);
+                    cr.scale(dw as f64 / vw, dh as f64 / vh);
                     show.draw(&mut cr, vw, vh);
                 }
-                None => show.draw(&mut cr, w as f64, h as f64),
+                None => show.draw(&mut cr, dw as f64, dh as f64),
             }
             cr.finish();
         }
@@ -437,8 +457,13 @@ impl App {
                 show.update(dt, if i == 0 { None } else { main_theme });
             }
             let (w, h) = Self::build(&mut self.sink, v);
-            self.gpu.resize(&mut v.surface, w, h);
-            self.gpu.present(&mut v.surface, &self.sink.scene)?;
+            match &mut v.screen {
+                Screen::Gpu(surface) => {
+                    self.gpu.resize(surface, w, h);
+                    self.gpu.present(surface, &self.sink.scene)?;
+                }
+                Screen::Cpu(c) => c.present(w, h)?,
+            }
         }
         Ok(())
     }
@@ -447,13 +472,21 @@ impl App {
         let _ = std::fs::create_dir_all(dir);
         let fps = self.frames as f64 / self.secs().max(0.001);
         let mut names = Vec::new();
+        let mode = format!("{:?}", self.o.mode).to_lowercase();
+        let mode = mode.split('(').next().unwrap_or("window").to_string();
         for i in 0..self.views.len() {
             let (w, h) = Self::build(&mut self.sink, &mut self.views[i]);
             names.push(self.views[i].show.as_ref().map(|s| s.name()).unwrap_or("black"));
-            match self.gpu.render_pixels(&self.sink.scene, w, h) {
-                Ok(px) => {
-                    let path = dir.join(format!("{}_{i}.png", format!("{:?}", self.o.mode).to_lowercase().replace(['(', ')'], "")));
-                    if let Err(e) = write_png(&path, &px, w, h) {
+            let shot = match &self.views[i].screen {
+                Screen::Gpu(_) => self.gpu.render_pixels(&self.sink.scene, w, h).map(|px| (px, w, h)),
+                Screen::Cpu(c) => {
+                    let (sw, sh) = c.sink.size();
+                    Ok((c.sink.pixels().to_vec(), sw, sh))
+                }
+            };
+            match shot {
+                Ok((px, pw, ph)) => {
+                    if let Err(e) = write_png(&dir.join(format!("{mode}_{i}.png")), &px, pw, ph) {
                         log(&format!("test: {e}"));
                     }
                 }
@@ -517,6 +550,10 @@ impl App {
 }
 
 fn print_bench(b: &Bench, o: &Options, views: &[View], fps_now: u32) {
+    let renderer = match views.first().map(|v| &v.screen) {
+        Some(Screen::Cpu(_)) => "cpu",
+        _ => "gpu",
+    };
     let n = b.work.len();
     if n == 0 {
         println!("bench: no frames");
@@ -530,7 +567,7 @@ fn print_bench(b: &Bench, o: &Options, views: &[View], fps_now: u32) {
     let late = b.gaps.iter().filter(|g| **g > target * 1.5).count();
     let size = views.first().map(|v| v.window.inner_size()).unwrap_or_default();
     let theme = views.first().and_then(|v| v.show.as_ref()).map(|s| s.name()).unwrap_or("black");
-    println!("bench rust: theme={theme} size={}x{} target={} fps (now {fps_now}) seconds={wall:.1}", size.width, size.height, o.fps);
+    println!("bench rust ({renderer}): theme={theme} size={}x{} target={} fps (now {fps_now}) seconds={wall:.1}", size.width, size.height, o.fps);
     println!(
         "  frames={n}  fps={:.1}  frame avg={:.2} ms  p95={:.2} ms  max={:.2} ms  late={late} ({:.1} %)",
         n as f64 / wall,
@@ -643,7 +680,10 @@ pub fn run(o: Options) -> Result<(), String> {
     let monitor = if o.system_monitor && !benching { Some(Monitor::new()) } else { None };
     let fake_system = if o.system_monitor && benching { Some(Rc::new(sysmon::fake())) } else { None };
     let bench = o.bench.map(|_| Bench { work: Vec::new(), gaps: Vec::new(), cpu0: 0.0, t0: now });
+    let (kind, why) = choose(o.renderer.as_deref());
+    log(&format!("drawing with: {why}"));
     let mut app = App {
+        kind,
         gov: Governor::new(fps, &all, o.adaptive_fps, 0.0),
         os: Box::new(platform::os::Os::new()),
         gpu: Gpu::new(),
