@@ -27,6 +27,10 @@ not known yet.
 - New theme **capricorns**: Alpine ibex in the mountains. The horns carry the state colour; working ones
   leap up the cliffs from ledge to ledge and look out over the valley, a tool call makes them rear up,
   sub-agents are kids that wait at the foot of the cliff.
+- New theme **cockroaches**: cartoon cockroaches under a kitchen at night, each with a junk helmet in its
+  state colour. They take pot shots at each other with seven improvised toy weapons (a tool call fires
+  one; the same tool always uses the same weapon), dig through the floor and pop up elsewhere, and
+  nibble the food lying around. Hits are harmless slapstick; sub-agents are nymphs.
 - New theme **dolphins**: a pod of dolphins under a sunlit sea surface. Back and fins carry the state
   colour; working ones leap out of the water, a tool call triggers a roll with a bubble ring; ships
   pass on the surface, a submarine, a turtle or manta and schools of fish under water; sub-agents are calves.
