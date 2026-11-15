@@ -1,14 +1,16 @@
 //! Adaptive frame rate: keeps the animation smooth when the computer is busy.
 //!
-//! The scenes are slow-moving, so 30 fps is plenty - and 15 fps that arrives evenly looks better than
-//! 30 fps that stutters. The governor watches how long each frame takes to produce. When producing
+//! The scenes are slow-moving, so 25 fps is plenty for a screensaver - and 15 fps that arrives evenly
+//! looks better than 25 fps that stutters. The governor watches how long each frame takes to produce. When producing
 //! frames eats too large a share of the time, it steps the frame rate down, which also leaves more of
 //! the machine to everything else. When there is plenty of headroom again it steps back up, slowly,
 //! and waits longer each time it has to step down again soon after.
 //!
 //! Used by the render loop:  if gov.due(waited) { ...render...; gov.record(seconds, now) }
 
-pub const LEVELS: [u32; 3] = [30, 20, 15]; // frames per second, best first
+/// Highest frame rate: it is a screensaver, more would only cost power.
+pub const FPS: u32 = 25;
+pub const LEVELS: [u32; 3] = [FPS, 20, 15]; // frames per second, best first
 const DOWN_AT: f64 = 0.60; // step down when (mean + spread of frame time) * fps exceeds this share of a second
 const UP_BELOW: f64 = 0.35; // step up only if the same figure would stay below this at the higher rate
 const SMOOTH: f64 = 0.10; // weight of each new frame in the running averages (~10 frames)
@@ -105,7 +107,7 @@ mod tests {
 
     #[test]
     fn steps_down_and_up() {
-        let mut g = Governor::new(30, &LEVELS, true, 0.0);
+        let mut g = Governor::new(30, &[30, 20, 15], true, 0.0);
         let mut now = 0.0;
         for _ in 0..200 {
             now += 1.0 / 30.0;
@@ -122,7 +124,7 @@ mod tests {
             g.record(0.004, now);
         }
         assert_eq!(g.fps(), 30);
-        let off = Governor::new(30, &LEVELS, false, 0.0);
+        let off = Governor::new(30, &[30, 20, 15], false, 0.0);
         assert_eq!(off.fps(), 30);
         assert!(off.due(1.0 / 30.0) && !off.due(0.01));
     }

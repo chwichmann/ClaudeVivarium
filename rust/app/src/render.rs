@@ -14,6 +14,7 @@ use crate::args::Args;
 use crate::gpu::{write_png, Gpu, VelloSink};
 
 /// render --demo --sysmon --themes all --times 6,24 --size 1920x1200 --out preview
+/// (--empty: no sessions, shows the resting creature; --decor: the extra-monitor look)
 pub fn render(args: &Args) -> Result<(), String> {
     let (w, h) = args.size("--size", (1920, 1200))?;
     let fps = args.num("--fps", 30.0)?.max(1.0) as usize;
@@ -22,6 +23,7 @@ pub fn render(args: &Args) -> Result<(), String> {
     times.sort_by(f64::total_cmp);
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let demo = args.flag("--demo");
+    let empty = args.flag("--empty"); // no sessions: shows the resting creature
     let mut gpu = Gpu::new();
     let mut sink = VelloSink::new();
     let mut reader = Reader::new();
@@ -44,7 +46,13 @@ pub fn render(args: &Args) -> Result<(), String> {
         for &target in &times {
             while sim < target {
                 if frame % fps == 0 {
-                    scene.set_sessions(&if demo { sessions::demo_sessions(sim) } else { reader.read() });
+                    scene.set_sessions(&if empty {
+                        Vec::new()
+                    } else if demo {
+                        sessions::demo_sessions(sim)
+                    } else {
+                        reader.read()
+                    });
                 }
                 scene.update(dt);
                 sim += dt;

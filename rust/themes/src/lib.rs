@@ -1,7 +1,17 @@
 //! The themes of Claude Vivarium - one file per theme - and their registry.
 use vivarium_core::scene::{Scene, SceneOpts, Stage};
 
+pub mod aquarium;
+pub mod archipelago;
+pub mod espresso;
+pub mod forest;
+pub mod guppies;
 pub mod meerkats;
+pub mod pasture;
+pub mod seabed;
+pub mod space;
+pub mod synthwave;
+pub mod terrarium;
 
 macro_rules! registry {
     ($( $name:literal => $ty:ty ),+ $(,)?) => {
@@ -19,5 +29,15 @@ macro_rules! registry {
 }
 
 registry! {
+    "aquarium" => aquarium::Aquarium,
+    "space" => space::Space,
+    "synthwave" => synthwave::Synthwave,
+    "pasture" => pasture::Pasture,
+    "seabed" => seabed::Seabed,
+    "forest" => forest::Forest,
+    "guppies" => guppies::Guppies,
+    "terrarium" => terrarium::Terrarium,
     "meerkats" => meerkats::Meerkats,
+    "espresso" => espresso::Espresso,
+    "archipelago" => archipelago::Archipelago,
 }
