@@ -12,6 +12,7 @@ pub mod seabed;
 pub mod space;
 pub mod synthwave;
 pub mod terrarium;
+pub mod workshop;
 
 /// Seasonal themes that are out of season today. They are left out of the "all" rotation but can
 /// always be named in the settings (themes = all, workshop).
@@ -48,4 +49,5 @@ registry! {
     "meerkats" => meerkats::Meerkats,
     "espresso" => espresso::Espresso,
     "archipelago" => archipelago::Archipelago,
+    "workshop" => workshop::Workshop,
 }
