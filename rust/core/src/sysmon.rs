@@ -87,7 +87,7 @@ mod os {
         let mut val = 0u64;
         let mut size = 8usize;
         // SAFETY: hw.memsize is a 64-bit integer
-        unsafe { sysctlbyname(b"hw.memsize\0".as_ptr(), &mut val as *mut u64 as *mut u8, &mut size, std::ptr::null(), 0) };
+        unsafe { sysctlbyname(c"hw.memsize".as_ptr().cast(), &mut val as *mut u64 as *mut u8, &mut size, std::ptr::null(), 0) };
         val
     }
 

@@ -580,6 +580,7 @@ impl<'a> Canvas<'a> {
     }
 
     /// Expanding rings used to mark a session that needs you.
+    #[allow(clippy::too_many_arguments)]
     pub fn pulse_rings(&mut self, x: f64, y: f64, r: f64, c: Rgb, a: f64, t: f64, s: f64) {
         for k in 0..2 {
             let f = ((t * 0.6) + k as f64 * 0.5).rem_euclid(1.0);

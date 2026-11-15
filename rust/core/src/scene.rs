@@ -102,6 +102,7 @@ pub struct Env {
 }
 
 impl Env {
+    #[allow(clippy::too_many_arguments)]
     /// Rising tool-call label; `vy` in px/s at scale 1 (Python default 40), `life` in seconds (default 4).
     pub fn spawn_floater(&mut self, x: f64, y: f64, label: &str, color: Rgb, style: FloatStyle, vy: f64, life: f64) {
         let ph = self.rng.uniform(0.0, TAU);
@@ -191,10 +192,8 @@ impl Base {
         let mut dy = self.heading.sin() * speed * 0.7;
         if let Some((tx, ty)) = target {
             let (ox, oy) = (tx - self.x, ty - self.y);
-            let d = match hypot(ox, oy) {
-                d if d == 0.0 => 1.0,
-                d => d,
-            };
+            let d = hypot(ox, oy);
+            let d = if d == 0.0 { 1.0 } else { d };
             let sp = (speed * 2.0).min(d * 1.2);
             dx = ox / d * sp + (t * 0.8 + self.seed).cos() * s * 18.0;
             dy = oy / d * sp + (t * 1.1 + self.seed).sin() * s * 12.0;
@@ -463,6 +462,9 @@ pub struct SceneOpts {
     pub seed: Option<u64>,
 }
 
+/// What the monitor panel was drawn from (time, samples, last values, scale).
+type SysKey = (u64, usize, u64, u64, u64);
+
 struct Label {
     lines: Vec<(Rc<TextLayout>, Rgb, f64)>,
     sizes: Vec<(f64, f64)>,
@@ -478,7 +480,7 @@ pub struct Stage<T: Theme> {
     hint: String,
     hint_until: f64,
     system: Option<Rc<SysData>>,
-    sys_cache: Option<((u64, usize, u64, u64, u64), Picture)>,
+    sys_cache: Option<(SysKey, Picture)>,
     next_index: u64,
 }
 

@@ -1,0 +1,71 @@
+name: Rust version
+
+on:
+  push:
+    branches: [rust-rewrite]
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux-x86_64
+            binary: claude-vivarium-rs
+          - os: macos-latest
+            name: macos-arm64
+            binary: claude-vivarium-rs
+          - os: windows-latest
+            name: windows-x86_64
+            binary: claude-vivarium-rs.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Tests
+        run: cargo test --release
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings
+      - name: Build
+        run: cargo build --release
+      - name: Software Vulkan for the render test (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      # Draws every theme without a window. The build machines have no real graphics card, so a
+      # failure here does not fail the build; the PNGs are uploaded when it works.
+      - name: Render every theme
+        continue-on-error: true
+        shell: bash
+        run: |
+          cp target/release/${{ matrix.binary }} render-test${{ runner.os == 'Windows' && '.exe' || '' }}
+          ./render-test render --demo --sysmon --themes all --times 12 --size 1600x1000 --out preview > render.log 2>&1 || true
+          cat render.log || true
+          ls preview || true
+      - name: Windows screen saver file
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cp target/release/claude-vivarium-rs.exe target/release/ClaudeVivariumRS.scr
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-vivarium-rs-${{ matrix.name }}
+          path: |
+            rust/target/release/${{ matrix.binary }}
+            rust/target/release/ClaudeVivariumRS.scr
+            rust/install-mac.sh
+            rust/install-linux.sh
+            rust/claude-vivarium-rs.service
+            rust/preview/*.png
+          if-no-files-found: warn

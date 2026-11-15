@@ -98,6 +98,8 @@ struct App {
     gov: Governor,
     started: Instant,
     last_frame: Instant,
+    /// when the next frame is due (advances in even steps, so timer slop does not add up)
+    due: Instant,
     next_refresh: Instant,
     exiting: Option<Exit>,
     was_active: bool,
@@ -323,6 +325,9 @@ impl App {
         if self.full() {
             let active = self.os.app_active().unwrap_or_else(|| self.views.iter().any(|v| v.focused));
             if active {
+                if !self.was_active {
+                    log(&format!("got the focus after {:.1} s", self.secs()));
+                }
                 self.was_active = true;
                 self.focus_lost = None;
             } else if self.was_active {
@@ -369,8 +374,13 @@ impl App {
             }
         }
         let waited = (now - self.last_frame).as_secs_f64();
-        if self.gov.due(waited) {
+        if now >= self.due && self.gov.due(waited) {
             self.last_frame = now;
+            let period = Duration::from_secs_f64(1.0 / self.gov.fps() as f64);
+            self.due += period;
+            if self.due < now {
+                self.due = now + period / 2; // fell behind: do not try to catch up
+            }
             if let Err(e) = self.frame(waited) {
                 // an error must never leave the screen open
                 log(&format!("frame error: {e}"));
@@ -398,8 +408,7 @@ impl App {
             }
             self.frames += 1;
         }
-        let next = self.last_frame + Duration::from_secs_f64(1.0 / self.gov.fps() as f64);
-        el.set_control_flow(ControlFlow::WaitUntil(next));
+        el.set_control_flow(ControlFlow::WaitUntil(self.due.max(now + Duration::from_millis(1))));
     }
 
     fn build(sink: &mut VelloSink, v: &mut View) -> (u32, u32) {
@@ -546,6 +555,7 @@ impl ApplicationHandler for App {
         }
         self.started = Instant::now();
         self.last_frame = Instant::now();
+        self.due = self.last_frame;
         self.refresh();
         self.next_refresh = Instant::now() + Duration::from_secs(1);
     }
@@ -644,6 +654,7 @@ pub fn run(o: Options) -> Result<(), String> {
         fake_system,
         started: now,
         last_frame: now,
+        due: now,
         next_refresh: now,
         exiting: None,
         was_active: false,

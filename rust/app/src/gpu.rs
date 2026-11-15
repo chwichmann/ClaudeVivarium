@@ -40,7 +40,7 @@ impl VelloSink {
         self.scene.reset();
         self.frame += 1;
         let frame = self.frame;
-        if frame % 64 == 0 {
+        if frame.is_multiple_of(64) {
             self.pics.retain(|_, p| frame - p.used < 240);
         }
     }
@@ -173,7 +173,11 @@ impl Gpu {
         width: u32,
         height: u32,
     ) -> Result<RenderSurface<'w>, String> {
-        let surface = pollster::block_on(self.ctx.create_surface(target, width.max(1), height.max(1), wgpu::PresentMode::AutoVsync))
+        // Linux: with vsync, presenting can block for as long as the window is not shown (e.g. once the
+        // screen is locked), and a blocked loop could never notice the lock. Frames are paced by our own
+        // timer anyway, so the newest frame is simply handed over without waiting.
+        let mode = if cfg!(target_os = "linux") { wgpu::PresentMode::AutoNoVsync } else { wgpu::PresentMode::AutoVsync };
+        let surface = pollster::block_on(self.ctx.create_surface(target, width.max(1), height.max(1), mode))
             .map_err(|e| format!("no usable graphics adapter: {e}"))?;
         self.renderer(surface.dev_id)?; // compile the shaders now, not at the first frame
         Ok(surface)

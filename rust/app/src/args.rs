@@ -8,13 +8,29 @@ impl Args {
         Args { list }
     }
 
+    /// Our own arguments: everything before a lone "--".
+    fn own(&self) -> &[String] {
+        let end = self.list.iter().position(|a| a == "--").unwrap_or(self.list.len());
+        &self.list[..end]
+    }
+
+    /// Arguments after a lone "--" (passed on to another program).
+    #[allow(dead_code)]
+    pub fn after_dashes(&self) -> Vec<String> {
+        match self.list.iter().position(|a| a == "--") {
+            Some(i) => self.list[i + 1..].to_vec(),
+            None => Vec::new(),
+        }
+    }
+
     pub fn flag(&self, name: &str) -> bool {
-        self.list.iter().any(|a| a == name)
+        self.own().iter().any(|a| a == name)
     }
 
     pub fn value(&self, name: &str) -> Option<&str> {
-        let i = self.list.iter().position(|a| a == name)?;
-        self.list.get(i + 1).map(String::as_str)
+        let own = self.own();
+        let i = own.iter().position(|a| a == name)?;
+        own.get(i + 1).map(String::as_str)
     }
 
     pub fn num(&self, name: &str, default: f64) -> Result<f64, String> {
