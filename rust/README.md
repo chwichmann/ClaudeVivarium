@@ -7,12 +7,13 @@ Python, Cairo, GTK or PyObjC to install. It lives next to the Python version so 
 **Status.** All eleven themes of the Python version plus new ones, the overlays, the settings file, the session reader, the adaptive frame
 rate and the platform integration are ported.
 
-- **macOS:** built and run on an M1 (window, full screen, self test, benchmarks, both renderers).
+- **macOS:** built, installed and run on an M1: window, full screen, self test, benchmarks, both renderers,
+  the idle agent, the hotkey, and the lock path (key press -> screen locked within a second -> closed).
 - **Windows:** run once in a Windows 11 ARM virtual machine, which has no usable graphics card: window,
   full screen `/s`, self test and benchmark work there with the CPU renderer. The GPU renderer has not
   run on Windows yet; installation, the preview pane and the logon screen on resume are untested.
 - **Linux:** compile-checked only, never run.
-- **The lock path** (key press -> lock -> close) has not been exercised on any platform yet.
+- **The lock path** on Linux and the logon screen on resume on Windows have not been exercised yet.
 
 **Two renderers.** With a real graphics card the program draws on the GPU. Without one - or when the
 system only offers a software stand-in for a GPU, as in virtual machines and some remote desktop
