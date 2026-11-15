@@ -64,6 +64,7 @@ cat <<MSG_EOF
 
 Claude Vivarium (Rust version) is installed and the agent is running.
 
+  Start it now: press Ctrl+Option+V (any key or click then locks the Mac)
   Test first:   "$BIN" selftest
                 "$BIN" run --windowed --demo
   Log:          tail -f "$LOG"

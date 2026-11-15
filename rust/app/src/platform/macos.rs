@@ -39,6 +39,67 @@ extern "C" {
     fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
 }
 
+// Global hotkey for "start the screensaver now" (Carbon hotkeys need no accessibility permission).
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct EventHotKeyId {
+    signature: u32,
+    id: u32,
+}
+
+#[repr(C)]
+struct EventTypeSpec {
+    class: u32,
+    kind: u32,
+}
+
+#[link(name = "Carbon", kind = "framework")]
+extern "C" {
+    fn GetEventDispatcherTarget() -> *mut c_void;
+    fn RegisterEventHotKey(
+        key_code: u32,
+        modifiers: u32,
+        id: EventHotKeyId,
+        target: *mut c_void,
+        options: u32,
+        out: *mut *mut c_void,
+    ) -> i32;
+    fn InstallEventHandler(
+        target: *mut c_void,
+        handler: extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32,
+        count: usize,
+        list: *const EventTypeSpec,
+        user_data: *mut c_void,
+        out: *mut *mut c_void,
+    ) -> i32;
+    fn RunCurrentEventLoop(timeout_seconds: f64) -> i32;
+}
+
+static HOTKEY_PRESSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+extern "C" fn on_hotkey(_call: *mut c_void, _event: *mut c_void, _user: *mut c_void) -> i32 {
+    HOTKEY_PRESSED.store(true, std::sync::atomic::Ordering::Relaxed);
+    0
+}
+
+/// Register Ctrl+Option+V ("start now", like Ctrl+Alt+V on Windows). Returns false if the keys are taken.
+fn register_hotkey() -> bool {
+    const KEY_V: u32 = 9;
+    const CONTROL: u32 = 0x1000;
+    const OPTION: u32 = 0x0800;
+    let spec = EventTypeSpec { class: u32::from_be_bytes(*b"keyb"), kind: 5 }; // hot key pressed
+    // SAFETY: plain Carbon calls with valid pointers; the handler is a static function
+    unsafe {
+        let target = GetEventDispatcherTarget();
+        if InstallEventHandler(target, on_hotkey, 1, &spec, std::ptr::null_mut(), std::ptr::null_mut()) != 0 {
+            return false;
+        }
+        let mut hotkey: *mut c_void = std::ptr::null_mut();
+        let id = EventHotKeyId { signature: u32::from_be_bytes(*b"CViv"), id: 1 };
+        RegisterEventHotKey(KEY_V, CONTROL | OPTION, id, target, 0, &mut hotkey) == 0
+    }
+}
+
 pub fn log(msg: &str) {
     eprintln!("{} [vivarium] {msg}", vivarium_core::util::strftime("%Y-%m-%d %H:%M:%S"));
 }
@@ -206,6 +267,8 @@ pub fn daemon(args: &Args) -> Result<(), String> {
     let idle_override = args.num("--idle", 0.0)?;
     log(&format!("agent started, idle_seconds={}", cfg.idle_seconds));
     let mut start_now = args.flag("--now");
+    let hotkey = register_hotkey();
+    log(if hotkey { "hotkey Ctrl+Option+V starts the screensaver now" } else { "the hotkey Ctrl+Option+V could not be registered" });
 
     while !stop.load(std::sync::atomic::Ordering::Relaxed) {
         if Instant::now() >= next_sample {
@@ -215,6 +278,13 @@ pub fn daemon(args: &Args) -> Result<(), String> {
             cfg = config::load(); // pick up changed settings
         }
         let idle = idle_seconds();
+        // the hotkey starts it right away, whatever the idle time or other apps say
+        let by_hotkey = HOTKEY_PRESSED.swap(false, std::sync::atomic::Ordering::Relaxed);
+        if by_hotkey && child.is_none() {
+            log("hotkey pressed");
+            std::thread::sleep(Duration::from_millis(600)); // let the keys be released first
+            start_now = true;
+        }
         if let Some(c) = child.as_mut() {
             if let Ok(Some(status)) = c.try_wait() {
                 child = None;
@@ -233,7 +303,7 @@ pub fn daemon(args: &Args) -> Result<(), String> {
                 started_this_idle = true;
                 start_now = false;
                 if screen_locked() {
-                } else if display_kept_awake_by_others() {
+                } else if !by_hotkey && display_kept_awake_by_others() {
                     log("another app keeps the display awake (video?) - not starting");
                 } else {
                     log("idle - starting screensaver");
@@ -244,7 +314,13 @@ pub fn daemon(args: &Args) -> Result<(), String> {
                 }
             }
         }
-        std::thread::sleep(Duration::from_secs(2));
+        if hotkey {
+            // waits up to 2 s and delivers a hotkey press in the meantime
+            // SAFETY: runs this thread's Carbon event loop for a bounded time
+            unsafe { RunCurrentEventLoop(2.0) };
+        } else {
+            std::thread::sleep(Duration::from_secs(2));
+        }
     }
 
     if let Some(mut c) = child {

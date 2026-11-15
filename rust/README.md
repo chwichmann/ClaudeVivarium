@@ -102,6 +102,9 @@ cd rust && ./install-mac.sh          # builds, installs to ~/Library/Application
 tail -f ~/Library/Logs/ClaudeVivarium.log
 ```
 
+**Ctrl+Option+V** starts the screensaver right away (the agent registers this hotkey), whatever the idle
+time. As after an idle start, any key or click then locks the Mac.
+
 ### Ubuntu (GNOME on Wayland)
 
 ```bash
