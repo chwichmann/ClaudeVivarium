@@ -31,6 +31,16 @@ pub fn parse_list(value: &str, all: &[&'static str]) -> Vec<&'static str> {
     if names.is_empty() { all.to_vec() } else { names }
 }
 
+/// The themes the running screensaver rotates through. Like `parse_list`, but seasonal themes that are
+/// out of season (`resting`) only take part when the settings name them: "all" leaves them out,
+/// "all, workshop" or "workshop" shows them at any time of the year.
+pub fn parse_rotation(value: &str, all: &[&'static str], resting: &[&str]) -> Vec<&'static str> {
+    let named: Vec<String> = value.replace(';', ",").split(',').map(|n| n.trim().to_lowercase()).collect();
+    let names: Vec<&'static str> =
+        parse_list(value, all).into_iter().filter(|n| !resting.contains(n) || named.iter().any(|w| w == n)).collect();
+    if names.is_empty() { parse_list(value, all) } else { names }
+}
+
 /// Looks like a Scene to the screensaver; rotates through the configured themes in random order.
 ///
 /// The list is shuffled, played through, then reshuffled - every theme comes once per round and
@@ -178,5 +188,10 @@ mod tests {
         assert_eq!(parse_list("all, -synthwave, -space", &ALL), vec!["aquarium", "pasture"]);
         assert_eq!(parse_list("-space", &ALL), vec!["aquarium", "synthwave", "pasture"]);
         assert_eq!(parse_list("nope", &ALL), ALL.to_vec());
+        assert_eq!(parse_rotation("all", &ALL, &["space"]), vec!["aquarium", "synthwave", "pasture"]);
+        assert_eq!(parse_rotation("all, space", &ALL, &["space"]), ALL.to_vec());
+        assert_eq!(parse_rotation("Space", &ALL, &["space"]), vec!["space"]);
+        assert_eq!(parse_rotation("all, -pasture", &ALL, &["space"]), vec!["aquarium", "synthwave"]);
+        assert_eq!(parse_rotation("all", &ALL, &[]), ALL.to_vec());
     }
 }

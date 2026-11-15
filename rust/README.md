@@ -16,7 +16,7 @@ rate and the platform integration are ported.
 
 **Two renderers.** With a real graphics card the program draws on the GPU. Without one - or when the
 system only offers a software stand-in for a GPU, as in virtual machines and some remote desktop
-sessions - it draws on the CPU instead (slower, about like the Python version; above 4 megapixels at
+sessions - it draws on the CPU instead (slower, about like the Python version; above 2.6 megapixels at
 half size). `selftest` shows the adapters and the choice; `--renderer gpu|cpu` forces one. Forcing the
 GPU renderer onto Windows' software adapter ("Microsoft Basic Render Driver") crashes; the cause is
 not known yet.

@@ -361,7 +361,7 @@ impl Offscreen {
     pub fn pixels(&mut self, width: u32, height: u32) -> Result<Vec<u8>, String> {
         match self {
             Offscreen::Gpu(gpu, sink) => gpu.render_pixels(&sink.scene, width, height),
-            Offscreen::Cpu(sink) => Ok(sink.pixels().to_vec()),
+            Offscreen::Cpu(sink) => Ok(sink.opaque_pixels()),
         }
     }
 }

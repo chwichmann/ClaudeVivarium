@@ -13,6 +13,14 @@ pub mod space;
 pub mod synthwave;
 pub mod terrarium;
 
+/// Seasonal themes that are out of season today. They are left out of the "all" rotation but can
+/// always be named in the settings (themes = all, workshop).
+pub fn resting() -> Vec<&'static str> {
+    let (month, day) = vivarium_core::util::local_month_day();
+    let christmas = month == 12 || (month == 1 && day <= 6); // Advent to Epiphany
+    if christmas { Vec::new() } else { vec!["workshop"] }
+}
+
 macro_rules! registry {
     ($( $name:literal => $ty:ty ),+ $(,)?) => {
         /// All theme names, in the order of the settings file.

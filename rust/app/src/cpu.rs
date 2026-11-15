@@ -14,7 +14,7 @@ use vivarium_core::canvas::{FillRule, GradientKind, LineCap, LineJoin, Paint, Pi
 use winit::window::Window;
 
 /// Above this many pixels a window is drawn at half size and doubled (keeps big screens affordable).
-const MAX_PIXELS: u32 = 4_200_000;
+const MAX_PIXELS: u32 = 2_600_000;
 
 fn xf(a: Affine) -> ts::Transform {
     let c = a.as_coeffs();
@@ -115,15 +115,21 @@ fn blit(dst: &mut ts::Pixmap, src: &ts::Pixmap, opaque: bool, x: i64, y: i64, al
             drow.copy_from_slice(srow);
             continue;
         }
-        for (d, s) in drow.chunks_exact_mut(4).zip(srow.chunks_exact(4)) {
-            let sa = (s[3] as u32 * a) >> 8;
-            if sa == 0 {
-                continue;
+        // branch-free so the compiler can process several pixels at once
+        let div255 = |v: u32| (v + 128 + ((v + 128) >> 8)) >> 8;
+        if a >= 256 {
+            for (d, s) in drow.chunks_exact_mut(4).zip(srow.chunks_exact(4)) {
+                let inv = 255 - s[3] as u32;
+                for k in 0..4 {
+                    d[k] = (s[k] as u32 + div255(d[k] as u32 * inv)).min(255) as u8;
+                }
             }
-            let inv = 255 - sa;
-            for k in 0..4 {
-                let sv = (s[k] as u32 * a) >> 8;
-                d[k] = (sv + (d[k] as u32 * inv + 127) / 255).min(255) as u8;
+        } else {
+            for (d, s) in drow.chunks_exact_mut(4).zip(srow.chunks_exact(4)) {
+                let inv = 255 - ((s[3] as u32 * a) >> 8);
+                for k in 0..4 {
+                    d[k] = (((s[k] as u32 * a) >> 8) + div255(d[k] as u32 * inv)).min(255) as u8;
+                }
             }
         }
     }
@@ -159,7 +165,9 @@ impl CpuSink {
             self.targets.clear();
             self.targets.push(ts::Pixmap::new(width, height).expect("size is at least 1x1"));
         }
-        self.targets[0].fill(ts::Color::BLACK);
+        // transparent black: cheaper to clear than opaque black, and the same picture once shown
+        // (the colours are stored already multiplied by their opacity)
+        self.targets[0].data_mut().fill(0);
         self.mask = None;
         self.open.clear();
         self.frame += 1;
@@ -169,7 +177,16 @@ impl CpuSink {
         }
     }
 
-    /// The finished frame: RGBA, 4 bytes per pixel, top row first.
+    /// The finished frame as an opaque picture for a PNG file.
+    pub fn opaque_pixels(&self) -> Vec<u8> {
+        let mut px = self.pixels().to_vec();
+        for p in px.chunks_exact_mut(4) {
+            p[3] = 255;
+        }
+        px
+    }
+
+    /// The finished frame: RGBA over black, 4 bytes per pixel, top row first (ignore the 4th byte).
     pub fn pixels(&self) -> &[u8] {
         self.targets.first().map(|p| p.data()).unwrap_or(&[])
     }

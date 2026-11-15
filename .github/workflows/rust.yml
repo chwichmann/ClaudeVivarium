@@ -8,6 +8,13 @@ on:
     paths: ["rust/**", ".github/workflows/rust.yml"]
   workflow_dispatch:
 
+# attestations: a signed statement that a downloaded program was built by this workflow from this
+# commit (check with: gh attestation verify <file> --repo chwichmann/ClaudeVivarium)
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
 jobs:
   build:
     strategy:
@@ -64,6 +71,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: cp target/release/claude-vivarium-rs.exe target/release/ClaudeVivariumRS.scr
+      - name: Attest the build
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            rust/target/release/${{ matrix.binary }}
+            rust/target/release/ClaudeVivariumRS.scr
       - uses: actions/upload-artifact@v4
         with:
           name: claude-vivarium-rs-${{ matrix.name }}

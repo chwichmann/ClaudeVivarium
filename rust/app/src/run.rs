@@ -13,7 +13,7 @@ use vivarium_core::canvas::Canvas;
 use vivarium_core::governor::{Governor, LEVELS};
 use vivarium_core::scene::SceneOpts;
 use vivarium_core::sessions::{self, Reader};
-use vivarium_core::show::{parse_list, Show};
+use vivarium_core::show::{parse_rotation, Show};
 use vivarium_core::sysmon::{self, Monitor};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -141,7 +141,7 @@ impl App {
     }
 
     fn make_show(&self, decor: bool, avoid: Option<&str>) -> Show {
-        let names = parse_list(&self.o.themes, vivarium_themes::NAMES);
+        let names = parse_rotation(&self.o.themes, vivarium_themes::NAMES, &vivarium_themes::resting());
         let opts = SceneOpts { show_text: !self.o.hide_text, decor, seed: self.o.seed };
         Show::new(factory, names, self.o.theme_minutes, opts, avoid)
     }
@@ -481,7 +481,7 @@ impl App {
                 Screen::Gpu(_) => self.gpu.render_pixels(&self.sink.scene, w, h).map(|px| (px, w, h)),
                 Screen::Cpu(c) => {
                     let (sw, sh) = c.sink.size();
-                    Ok((c.sink.pixels().to_vec(), sw, sh))
+                    Ok((c.sink.opaque_pixels(), sw, sh))
                 }
             };
             match shot {

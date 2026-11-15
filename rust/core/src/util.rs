@@ -67,6 +67,13 @@ pub fn strftime(fmt: &str) -> String {
     chrono::Local::now().format(fmt).to_string()
 }
 
+/// Today's (month, day) in local time.
+pub fn local_month_day() -> (u32, u32) {
+    use chrono::Datelike;
+    let n = chrono::Local::now();
+    (n.month(), n.day())
+}
+
 /// Local time of day in hours (0.0 .. 24.0).
 pub fn local_hours() -> f64 {
     use chrono::Timelike;
