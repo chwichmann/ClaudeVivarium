@@ -27,6 +27,9 @@ not known yet.
 - New theme **capricorns**: Alpine ibex in the mountains. The horns carry the state colour; working ones
   leap up the cliffs from ledge to ledge and look out over the valley, a tool call makes them rear up,
   sub-agents are kids that wait at the foot of the cliff.
+- New theme **dolphins**: a pod of dolphins under a sunlit sea surface. Back and fins carry the state
+  colour; working ones leap out of the water, a tool call triggers a roll with a bubble ring; ships
+  pass on the surface, a submarine, a turtle or manta and schools of fish under water; sub-agents are calves.
 - New theme **gorillas**: gorillas in a misty jungle. Fur stays dark; the state colour is a rim light,
   a glow and a tint on the back. Working ones knuckle-walk and now and then climb a tree and swing on a
   liana to the next; a tool call makes them beat their chest; sub-agents are babies.
