@@ -24,6 +24,9 @@ not known yet.
 
 ## What is different from the Python version
 
+- New theme **capricorns**: Alpine ibex in the mountains. The horns carry the state colour; working ones
+  leap up the cliffs from ledge to ledge and look out over the valley, a tool call makes them rear up,
+  sub-agents are kids that wait at the foot of the cliff.
 - New theme **gorillas**: gorillas in a misty jungle. Fur stays dark; the state colour is a rim light,
   a glow and a tint on the back. Working ones knuckle-walk and now and then climb a tree and swing on a
   liana to the next; a tool call makes them beat their chest; sub-agents are babies.

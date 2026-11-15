@@ -30,7 +30,7 @@ mouse_move = hint
 hide_text = false
 
 # Themes: aquarium, space, synthwave, pasture, seabed, forest, guppies, terrarium, meerkats, espresso,
-#         archipelago, gorillas, penguins,
+#         archipelago, gorillas, penguins, capricorns,
 #         halloween (part of \"all\" only from 1 October to 2 November),
 #         workshop (Christmas: part of \"all\" only from 1 December to 6 January)
 #   all             = rotate through every theme

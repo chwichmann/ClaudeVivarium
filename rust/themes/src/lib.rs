@@ -2,6 +2,7 @@
 use vivarium_core::scene::{Scene, SceneOpts, Stage};
 
 pub mod aquarium;
+pub mod capricorns;
 pub mod archipelago;
 pub mod espresso;
 pub mod forest;
@@ -62,6 +63,7 @@ registry! {
     "archipelago" => archipelago::Archipelago,
     "gorillas" => gorillas::Gorillas,
     "penguins" => penguins::Penguins,
+    "capricorns" => capricorns::Capricorns,
     "halloween" => halloween::Halloween,
     "workshop" => workshop::Workshop,
 }
