@@ -55,7 +55,7 @@ struct EventTypeSpec {
 
 #[link(name = "Carbon", kind = "framework")]
 extern "C" {
-    fn GetEventDispatcherTarget() -> *mut c_void;
+    fn GetApplicationEventTarget() -> *mut c_void;
     fn RegisterEventHotKey(
         key_code: u32,
         modifiers: u32,
@@ -72,7 +72,38 @@ extern "C" {
         user_data: *mut c_void,
         out: *mut *mut c_void,
     ) -> i32;
-    fn RunCurrentEventLoop(timeout_seconds: f64) -> i32;
+}
+
+#[link(name = "AppKit", kind = "framework")]
+extern "C" {
+    static NSDefaultRunLoopMode: *mut AnyObject;
+}
+
+/// Wait up to `seconds`, handing events (among them a hotkey press) to their handlers meanwhile.
+fn pump_events(seconds: f64) {
+    let app = nsapp();
+    let Some(date_cls) = AnyClass::get(c"NSDate") else {
+        std::thread::sleep(Duration::from_secs_f64(seconds));
+        return;
+    };
+    if app.is_null() {
+        std::thread::sleep(Duration::from_secs_f64(seconds));
+        return;
+    }
+    // SAFETY: main thread, valid application object; the event is used before the next call
+    unsafe {
+        let until: *mut AnyObject = msg_send![date_cls, dateWithTimeIntervalSinceNow: seconds];
+        loop {
+            let ev: *mut AnyObject = msg_send![app, nextEventMatchingMask: u64::MAX, untilDate: until, inMode: NSDefaultRunLoopMode, dequeue: Bool::YES];
+            if ev.is_null() {
+                break; // time is up
+            }
+            let _: () = msg_send![app, sendEvent: ev];
+            if HOTKEY_PRESSED.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+        }
+    }
 }
 
 static HOTKEY_PRESSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -90,7 +121,13 @@ fn register_hotkey() -> bool {
     let spec = EventTypeSpec { class: u32::from_be_bytes(*b"keyb"), kind: 5 }; // hot key pressed
     // SAFETY: plain Carbon calls with valid pointers; the handler is a static function
     unsafe {
-        let target = GetEventDispatcherTarget();
+        // hotkeys are only delivered to a process that is known to the window server as an application
+        let app = nsapp();
+        if !app.is_null() {
+            let _: Bool = msg_send![app, setActivationPolicy: 1isize]; // accessory: no Dock icon
+            let _: () = msg_send![app, finishLaunching];
+        }
+        let target = GetApplicationEventTarget();
         if InstallEventHandler(target, on_hotkey, 1, &spec, std::ptr::null_mut(), std::ptr::null_mut()) != 0 {
             return false;
         }
@@ -316,8 +353,7 @@ pub fn daemon(args: &Args) -> Result<(), String> {
         }
         if hotkey {
             // waits up to 2 s and delivers a hotkey press in the meantime
-            // SAFETY: runs this thread's Carbon event loop for a bounded time
-            unsafe { RunCurrentEventLoop(2.0) };
+            pump_events(2.0);
         } else {
             std::thread::sleep(Duration::from_secs(2));
         }
@@ -356,6 +392,25 @@ pub fn settings() -> Result<(), String> {
     Ok(())
 }
 
+/// Check that the hotkey arrives: waits up to 10 s for Ctrl+Option+V and says what happened.
+pub fn hotkey_test() -> Result<(), String> {
+    if !register_hotkey() {
+        return Err("the hotkey could not be registered".into());
+    }
+    println!("press Ctrl+Option+V within 10 seconds ...");
+    for _ in 0..20 {
+        pump_events(0.5);
+        if HOTKEY_PRESSED.load(std::sync::atomic::Ordering::Relaxed) {
+            println!("hotkey received");
+            return Ok(());
+        }
+    }
+    Err("no hotkey arrived".into())
+}
+
 pub fn extra(cmd: &str, _cfg: &config::Config) -> Result<(), String> {
+    if cmd == "hotkey-test" {
+        return hotkey_test();
+    }
     Err(format!("'{cmd}' exists on Windows only; on macOS use install-mac.sh"))
 }

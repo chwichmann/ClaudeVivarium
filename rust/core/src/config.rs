@@ -30,7 +30,9 @@ mouse_move = hint
 hide_text = false
 
 # Themes: aquarium, space, synthwave, pasture, seabed, forest, guppies, terrarium, meerkats, espresso,
-#         archipelago, gorillas, penguins, workshop (Christmas: part of \"all\" only from 1 December to 6 January)
+#         archipelago, gorillas, penguins,
+#         halloween (part of \"all\" only from 1 October to 2 November),
+#         workshop (Christmas: part of \"all\" only from 1 December to 6 January)
 #   all             = rotate through every theme
 #   one name        = always this theme
 #   comma list      = rotate through these, e.g.  themes = pasture, seabed, forest

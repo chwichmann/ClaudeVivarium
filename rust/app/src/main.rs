@@ -201,7 +201,7 @@ fn dispatch(list: Vec<String>) -> Result<(), String> {
         "sessions" => sessions_cmd(&args),
         "render" => render::render(&args),
         "bench" => bench(&args, &cfg),
-        "record" | "now" | "install" | "uninstall" => platform::os::extra(first.trim_start_matches("--"), &cfg),
+        "record" | "now" | "install" | "uninstall" | "hotkey-test" => platform::os::extra(first.trim_start_matches("--"), &cfg),
         "" if cfg!(windows) => platform::os::settings(), // double click on the .scr: settings
         "help" | "h" | "" => {
             print!("{USAGE}");

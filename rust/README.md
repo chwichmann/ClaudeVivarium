@@ -26,6 +26,10 @@ not known yet.
 - New theme **gorillas**: gorillas in a misty jungle. Fur stays dark; the state colour is a rim light,
   a glow and a tint on the back. Working ones knuckle-walk and now and then climb a tree and swing on a
   liana to the next; a tool call makes them beat their chest; sub-agents are babies.
+- New theme **halloween**: funny skeletons in a moonlit graveyard with pumpkins and spider webs. The bones
+  glow in the state colour; a tool call triggers a gag (the skull pops off, a bone is juggled);
+  sub-agents are little ghosts. Seasonal like workshop: with `themes = all` it takes part from 1 October
+  to 2 November.
 - New theme **penguins**: penguins on an ice floe under an aurora. The state colour is each penguin's
   scarf and hat; working ones waddle and slide on their bellies, a tool call makes a fish leap from a
   fishing hole, sub-agents are grey chicks.

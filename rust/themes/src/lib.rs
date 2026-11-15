@@ -7,6 +7,7 @@ pub mod espresso;
 pub mod forest;
 pub mod gorillas;
 pub mod guppies;
+pub mod halloween;
 pub mod meerkats;
 pub mod pasture;
 pub mod penguins;
@@ -17,11 +18,19 @@ pub mod terrarium;
 pub mod workshop;
 
 /// Seasonal themes that are out of season today. They are left out of the "all" rotation but can
-/// always be named in the settings (themes = all, workshop).
+/// always be named in the settings (themes = all, halloween, workshop).
 pub fn resting() -> Vec<&'static str> {
     let (month, day) = vivarium_core::util::local_month_day();
+    let halloween = month == 10 || (month == 11 && day <= 2); // October to All Souls' Day
     let christmas = month == 12 || (month == 1 && day <= 6); // Advent to Epiphany
-    if christmas { Vec::new() } else { vec!["workshop"] }
+    let mut out = Vec::new();
+    if !halloween {
+        out.push("halloween");
+    }
+    if !christmas {
+        out.push("workshop");
+    }
+    out
 }
 
 macro_rules! registry {
@@ -53,5 +62,6 @@ registry! {
     "archipelago" => archipelago::Archipelago,
     "gorillas" => gorillas::Gorillas,
     "penguins" => penguins::Penguins,
+    "halloween" => halloween::Halloween,
     "workshop" => workshop::Workshop,
 }
