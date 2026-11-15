@@ -5,9 +5,21 @@ Direct3D 12 on Windows, Vulkan on Linux) and the whole program is one file per p
 Python, Cairo, GTK or PyObjC to install. It lives next to the Python version so both can be compared.
 
 **Status.** All eleven themes, the overlays, the settings file, the session reader, the adaptive frame
-rate and the platform integration are ported. macOS was built and run on an M1 (window, full screen,
-self test, benchmarks). **Linux and Windows are only compile-checked so far - they have not been run.**
-The lock path (key press -> lock -> close) has not been exercised on any platform yet.
+rate and the platform integration are ported.
+
+- **macOS:** built and run on an M1 (window, full screen, self test, benchmarks, both renderers).
+- **Windows:** run once in a Windows 11 ARM virtual machine, which has no usable graphics card: window,
+  full screen `/s`, self test and benchmark work there with the CPU renderer. The GPU renderer has not
+  run on Windows yet; installation, the preview pane and the logon screen on resume are untested.
+- **Linux:** compile-checked only, never run.
+- **The lock path** (key press -> lock -> close) has not been exercised on any platform yet.
+
+**Two renderers.** With a real graphics card the program draws on the GPU. Without one - or when the
+system only offers a software stand-in for a GPU, as in virtual machines and some remote desktop
+sessions - it draws on the CPU instead (slower, about like the Python version; above 4 megapixels at
+half size). `selftest` shows the adapters and the choice; `--renderer gpu|cpu` forces one. Forcing the
+GPU renderer onto Windows' software adapter ("Microsoft Basic Render Driver") crashes; the cause is
+not known yet.
 
 ## What is different from the Python version
 
@@ -26,7 +38,8 @@ core/        everything without a window or GPU: sessions, settings, CPU/memory 
              frame rate, the shared scene (labels, banner, status strip, panel) and a drawing surface
              with Cairo's calls (canvas.rs), so a theme reads like its Python original
 themes/      one file per theme (themes/src/<name>.rs) and the registry (themes/src/lib.rs)
-app/         the program: GPU renderer (gpu.rs), window and lock logic (run.rs), commands (main.rs),
+app/         the program: GPU renderer (gpu.rs), CPU renderer (cpu.rs), window and lock logic (run.rs),
+             commands (main.rs),
              and platform/{macos,linux,windows}.rs
 ```
 
@@ -130,3 +143,6 @@ Building the list of shapes for a frame takes 0.1 to 0.4 ms in Rust (Python: 4 t
 the rest of the Rust figure is the renderer handing the frame to the graphics card. Neither version
 dropped frames in these runs. The figures do not include the work of the graphics card itself or of
 the system compositor, and power use was not measured.
+
+The CPU renderer in the same window: meerkats 38 % of one core at 25 fps on the M1 (15 ms per frame);
+in the Windows 11 ARM virtual machine synthwave took 53 % (21 ms per frame).
