@@ -25,6 +25,8 @@ fi
 if [ -x "$SRC/claude-vivarium-rs" ]; then
     BUILT="$SRC/claude-vivarium-rs"
 else
+    # rustup puts cargo into ~/.cargo/bin, which a shell that was open before the install does not know yet
+    command -v cargo >/dev/null || PATH="$HOME/.cargo/bin:$PATH"
     command -v cargo >/dev/null || { echo "Please install Rust first: https://rustup.rs"; exit 1; }
     (cd "$SRC" && cargo build --release)
     BUILT="$SRC/target/release/claude-vivarium-rs"
