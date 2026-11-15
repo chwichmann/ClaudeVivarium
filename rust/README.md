@@ -4,7 +4,7 @@ A rewrite of Claude Vivarium in Rust. Every theme is drawn on the graphics card 
 Direct3D 12 on Windows, Vulkan on Linux) and the whole program is one file per platform, with no
 Python, Cairo, GTK or PyObjC to install. It lives next to the Python version so both can be compared.
 
-**Status.** All eleven themes of the Python version plus one new one, the overlays, the settings file, the session reader, the adaptive frame
+**Status.** All eleven themes of the Python version plus new ones, the overlays, the settings file, the session reader, the adaptive frame
 rate and the platform integration are ported.
 
 - **macOS:** built and run on an M1 (window, full screen, self test, benchmarks, both renderers).
@@ -23,7 +23,10 @@ not known yet.
 
 ## What is different from the Python version
 
-- A twelfth theme, **workshop** ("Elves in Santa's Workshop"): every session is an elf whose hat and tunic
+- New theme **penguins**: penguins on an ice floe under an aurora. The state colour is each penguin's
+  scarf and hat; working ones waddle and slide on their bellies, a tool call makes a fish leap from a
+  fishing hole, sub-agents are grey chicks.
+- New theme **workshop** ("Elves in Santa's Workshop"): every session is an elf whose hat and tunic
   show the state colour; a tool call tosses a present onto the pile. It is seasonal: with `themes = all`
   it only takes part from 1 December to 6 January, but it can be named at any time
   (`themes = all, workshop`, or `--themes workshop`).

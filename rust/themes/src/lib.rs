@@ -8,6 +8,7 @@ pub mod forest;
 pub mod guppies;
 pub mod meerkats;
 pub mod pasture;
+pub mod penguins;
 pub mod seabed;
 pub mod space;
 pub mod synthwave;
@@ -49,5 +50,6 @@ registry! {
     "meerkats" => meerkats::Meerkats,
     "espresso" => espresso::Espresso,
     "archipelago" => archipelago::Archipelago,
+    "penguins" => penguins::Penguins,
     "workshop" => workshop::Workshop,
 }
