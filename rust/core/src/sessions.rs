@@ -495,7 +495,7 @@ impl Reader {
 // --------------------------------------------------------------------------- demo data
 
 const DEMO: [(&str, &str, f64); 3] = [
-    ("Netdocs Test 3", "~/dev/netdocs", 0.0),
+    ("Web shop", "~/dev/webshop", 0.0),
     ("Screensaver", "~/dev/claude-screensaver", 13.0),
     ("Infra audit", "~/dev/infra", 27.0),
 ];
@@ -574,7 +574,7 @@ pub fn demo_sessions(t: f64) -> Vec<Rc<Session>> {
         id: "demo-bg".into(),
         pid: 1099,
         name: "Test bench".into(),
-        cwd: "~/dev/netdocs".into(),
+        cwd: "~/dev/webshop".into(),
         status: "shell".into(),
         state: State::Working,
         background: true,

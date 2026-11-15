@@ -421,7 +421,7 @@ def selftest():
     y = 10
     for name, wgt in (("LIGHT", scene.Weight.LIGHT), ("NORMAL", scene.Weight.NORMAL),
                       ("SEMIBOLD", scene.Weight.SEMIBOLD), ("BOLD", scene.Weight.BOLD)):
-        lay = t.layout(cr, f"{name}: Netdocs Dev 1 · working · 3m 05s ● “quoted”", 26, wgt)
+        lay = t.layout(cr, f"{name}: Web shop · working · 3m 05s ● “quoted”", 26, wgt)
         w, h = lay.get_pixel_size()
         print(f"  font {name:8s} {t.FACES[wgt][0] if hasattr(t, 'FACES') else ''}: {w}x{h} px")
         scene.Text.show(cr, lay, 10, y, (1, 1, 1), 1)
