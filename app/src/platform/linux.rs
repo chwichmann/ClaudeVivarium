@@ -515,7 +515,7 @@ pub fn selftest_lines() -> Vec<String> {
     out
 }
 
-pub fn settings() -> Result<(), String> {
+pub fn settings(_owner: Option<isize>) -> Result<(), String> {
     Command::new("xdg-open").arg(config::path()).status().map_err(|e| e.to_string())?;
     Ok(())
 }

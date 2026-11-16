@@ -64,6 +64,7 @@ fn options(args: &Args, cfg: &Config, mode: Mode) -> Result<Options, String> {
         hide_text: args.flag("--hide-text") || cfg.hide_text,
         system_monitor: cfg.system_monitor && !args.flag("--no-system-monitor"),
         other_monitors_theme: cfg.other_monitors_theme,
+        monitors: cfg.monitors,
         adaptive_fps: cfg.adaptive_fps,
         fps: args.num("--fps", vivarium_core::governor::FPS as f64)?.clamp(1.0, 240.0) as u32,
         window_size: args.size("--size", (1280, 800))?,
@@ -189,7 +190,11 @@ fn dispatch(list: Vec<String>) -> Result<(), String> {
                 o.system_monitor = false;
                 run::run(o)
             }
-            _ => platform::os::settings(),
+            _ => {
+                // /c:<hwnd> or /c <hwnd>: the Windows dialog that asks for the settings
+                let owner = sw.split_once(':').map(|(_, h)| h.to_string()).or_else(|| list.get(1).cloned());
+                platform::os::settings(owner.and_then(|h| h.trim().parse().ok()))
+            }
         };
     }
     match first.trim_start_matches("--") {
@@ -204,7 +209,8 @@ fn dispatch(list: Vec<String>) -> Result<(), String> {
         "render" => render::render(&args),
         "bench" => bench(&args, &cfg),
         "record" | "now" | "install" | "uninstall" | "hotkey-test" => platform::os::extra(first.trim_start_matches("--"), &cfg),
-        "" if cfg!(windows) => platform::os::settings(), // double click on the .scr: settings
+        "" if cfg!(windows) => platform::os::settings(None), // double click on the .scr: settings
+        "settings" => platform::os::settings(None),
         "help" | "h" | "" => {
             print!("{USAGE}");
             Ok(())
@@ -213,7 +219,11 @@ fn dispatch(list: Vec<String>) -> Result<(), String> {
     }
 }
 
+/// When the program started (for the start-up timing in the log).
+pub static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
 fn main() {
+    STARTED.get_or_init(std::time::Instant::now);
     #[cfg(windows)]
     platform::windows::attach_console();
     if let Err(e) = dispatch(std::env::args().skip(1).collect()) {

@@ -38,11 +38,11 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED: u32 = 0x0000_0008 | 0x0000_0200; // detached, own process group
 static CONSOLE: AtomicBool = AtomicBool::new(false);
 
-fn wide(s: &str) -> Vec<u16> {
+pub(super) fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-fn wide_path(p: &Path) -> Vec<u16> {
+pub(super) fn wide_path(p: &Path) -> Vec<u16> {
     p.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
 }
 
@@ -203,8 +203,13 @@ pub fn selftest_lines() -> Vec<String> {
     vec![format!("log: {}", log_path().display()), format!("install folder: {}", install_dir().display())]
 }
 
-/// The "Settings..." button: open config.ini.
-pub fn settings() -> Result<(), String> {
+/// The "Settings..." button: the settings dialog. `owner`: the Windows dialog that called us (/c:<hwnd>).
+pub fn settings(owner: Option<isize>) -> Result<(), String> {
+    super::windows_settings::run(owner)
+}
+
+/// Open config.ini in the program registered for .ini files.
+pub(super) fn open_config_file() -> Result<(), String> {
     let _ = config::load(); // creates the file with defaults if missing
     let (verb, file) = (wide("open"), wide_path(&config::path()));
     // SAFETY: null-terminated strings that live during the call

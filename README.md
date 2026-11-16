@@ -144,7 +144,7 @@ so Windows SmartScreen (and Gatekeeper on macOS) will ask before running it.
 | Platform | File |
 |---|---|
 | Linux | `~/.config/claude-vivarium/config.ini` |
-| Windows | `%APPDATA%\ClaudeVivarium\config.ini` (the "Settings..." button of the Windows dialog opens it) |
+| Windows | `%APPDATA%\ClaudeVivarium\config.ini` - or the settings dialog: "Settings..." in the Windows screen saver dialog, right-click on the `.scr` > Configure, or `claude-vivarium-rs.exe settings` |
 | macOS | `~/Library/Application Support/ClaudeVivarium/config.ini` |
 
 ```ini
@@ -157,9 +157,13 @@ themes = all           # all | one theme | comma list, e.g. pasture, seabed, for
                        # all except some: all, -synthwave, -space
 theme_minutes = 10     # minutes per theme, 0 = never switch
 system_monitor = true  # CPU/memory panel top right
-other_monitors = theme # theme | black  (further monitors)
+monitors = all         # all | primary | secondary (only that monitor, the others stay black;
+                       # with a single monitor that one is used)
+other_monitors = theme # theme | black  (further monitors, with monitors = all)
 adaptive_fps = true    # lower the frame rate (25 -> 20/15 fps) while the computer is busy
 ```
+
+The Windows dialog writes only the keys it shows; comments and anything else in the file stay.
 
 `deploy-config.sh laptop1 laptop2` copies `config.ini` from this folder to Ubuntu machines.
 

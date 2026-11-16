@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use vello::util::RenderSurface;
 use vivarium_core::canvas::Canvas;
+use vivarium_core::config::Monitors;
 use vivarium_core::governor::{Governor, LEVELS};
 use vivarium_core::scene::SceneOpts;
 use vivarium_core::sessions::{self, Reader};
@@ -52,6 +53,8 @@ pub struct Options {
     pub hide_text: bool,
     pub system_monitor: bool,
     pub other_monitors_theme: bool,
+    /// which monitors show the vivarium (the others stay black)
+    pub monitors: vivarium_core::config::Monitors,
     pub adaptive_fps: bool,
     pub fps: u32,
     pub window_size: (u32, u32),
@@ -80,6 +83,9 @@ struct View {
     focused: bool,
     /// draw the scene as if the window had this size and scale it down (tiny preview window)
     virtual_size: Option<(f64, f64)>,
+    /// false = created hidden, shown after its first frame (Windows full screen: no white window while
+    /// the GPU is still preparing)
+    shown: bool,
 }
 
 struct Exit {
@@ -115,6 +121,8 @@ struct App {
     exiting: Option<Exit>,
     was_active: bool,
     focus_lost: Option<Instant>,
+    /// when the main window showed its first frame (Windows creates the windows hidden)
+    first_shown: Option<Instant>,
     mouse_origin: Option<(WindowId, f64, f64)>,
     stop: Arc<AtomicBool>,
     bench: Option<Bench>,
@@ -156,7 +164,8 @@ impl App {
             Kind::Cpu => Screen::Cpu(Box::new(CpuScreen::new(window.clone())?)),
         };
         self.os.window_created(&window, self.full());
-        self.views.push(View { window, screen, show, focused: false, virtual_size });
+        let shown = window.is_visible() != Some(false);
+        self.views.push(View { window, screen, show, focused: false, virtual_size, shown });
         Ok(())
     }
 
@@ -170,6 +179,13 @@ impl App {
                 if monitors.is_empty() {
                     return Err("no monitor found".into());
                 }
+                // settings "monitors": the chosen one goes first - views[0] is the main view everywhere
+                // (theme, panel, picker, keys); with a single monitor that one is used anyway
+                if self.o.monitors == Monitors::Secondary && monitors.len() > 1 {
+                    let m = monitors.remove(1);
+                    monitors.insert(0, m);
+                }
+                let only_one = self.o.monitors != Monitors::All;
                 for (i, m) in monitors.into_iter().enumerate() {
                     let attrs = Window::default_attributes().with_title("Claude Vivarium").with_decorations(false);
                     // macOS: a borderless window over the whole screen, raised to screen-saver level by the
@@ -178,16 +194,21 @@ impl App {
                     let attrs = attrs.with_position(m.position()).with_inner_size(m.size());
                     #[cfg(not(target_os = "macos"))]
                     let attrs = attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(m))));
+                    // Windows: hidden until the first frame is on it - otherwise Windows shows the empty window
+                    // (white) for the seconds the GPU needs to prepare
                     #[cfg(windows)]
                     let attrs = {
                         use winit::platform::windows::WindowAttributesExtWindows;
-                        attrs.with_window_level(winit::window::WindowLevel::AlwaysOnTop).with_skip_taskbar(true)
+                        attrs
+                            .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
+                            .with_skip_taskbar(true)
+                            .with_visible(false)
                     };
                     let window = el.create_window(attrs).map_err(|e| format!("window: {e}"))?;
                     window.set_cursor_visible(false);
                     let show = if i == 0 {
                         Some(self.make_show(false, None))
-                    } else if self.o.other_monitors_theme {
+                    } else if self.o.other_monitors_theme && !only_one {
                         let main = self.views[0].show.as_ref().map(|s| s.name());
                         Some(self.make_show(true, main))
                     } else {
@@ -348,7 +369,7 @@ impl App {
                     self.wake("focus lost");
                     return;
                 }
-            } else if self.locking() && self.secs() > 3.0 {
+            } else if self.locking() && self.first_shown.is_some_and(|t| t.elapsed().as_secs_f64() > 3.0) {
                 log("never got the keyboard focus - failing closed");
                 self.wake("no focus");
                 return;
@@ -465,6 +486,18 @@ impl App {
                     self.gpu.present(surface, &self.sink.scene)?;
                 }
                 Screen::Cpu(c) => c.present(w, h)?,
+            }
+            if !v.shown {
+                v.shown = true;
+                v.window.set_visible(true);
+                if i == 0 {
+                    v.window.focus_window();
+                    let total = crate::STARTED.get().map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+                    log(&format!("first frame shown {total:.2} s after the program started"));
+                }
+            }
+            if i == 0 && self.first_shown.is_none() {
+                self.first_shown = Some(Instant::now());
             }
         }
         Ok(())
@@ -716,9 +749,14 @@ pub fn run(o: Options) -> Result<(), String> {
         use winit::platform::windows::EventLoopBuilderExtWindows;
         builder.with_msg_hook(platform::windows::swallow_screensave_message);
     }
+    let t0 = *crate::STARTED.get_or_init(Instant::now);
+    let mut phases = vec![("settings", t0.elapsed().as_secs_f64())];
+    let mut phase = |name: &'static str| phases.push((name, t0.elapsed().as_secs_f64()));
     let event_loop = builder.build().map_err(|e| format!("event loop: {e}"))?;
     event_loop.set_control_flow(ControlFlow::Wait);
+    phase("event loop");
     vivarium_core::text::warm_up();
+    phase("fonts");
     let now = Instant::now();
     let fps = o.fps.max(1);
     let levels: Vec<u32> = LEVELS.iter().copied().filter(|l| *l < fps).collect();
@@ -727,17 +765,24 @@ pub fn run(o: Options) -> Result<(), String> {
     let benching = o.bench.is_some();
     let monitor = if o.system_monitor && !benching { Some(Monitor::new()) } else { None };
     let fake_system = if o.system_monitor && benching { Some(Rc::new(sysmon::fake())) } else { None };
+    phase("CPU monitor");
     let bench = o.bench.map(|_| Bench { work: Vec::new(), gaps: Vec::new(), cpu0: 0.0, t0: now });
     let (kind, why) = choose(o.renderer.as_deref());
+    phase("graphics card");
+    let gpu = Gpu::new();
+    let reader = Reader::new();
+    phase("sessions");
     log(&format!("drawing with: {why}"));
+    let times: Vec<String> = phases.iter().map(|(n, t)| format!("{n} {t:.2}")).collect();
+    log(&format!("start-up times (s since the program started): {}", times.join(", ")));
     let mut app = App {
         kind,
         gov: Governor::new(fps, &all, o.adaptive_fps, 0.0),
         os: Box::new(platform::os::Os::new()),
-        gpu: Gpu::new(),
+        gpu,
         sink: VelloSink::new(),
         views: Vec::new(),
-        reader: Reader::new(),
+        reader,
         monitor,
         fake_system,
         started: now,
@@ -747,6 +792,7 @@ pub fn run(o: Options) -> Result<(), String> {
         exiting: None,
         was_active: false,
         focus_lost: None,
+        first_shown: None,
         mouse_origin: None,
         stop: crate::signals::stop_flag(),
         bench,

@@ -146,7 +146,7 @@ fn params(width: u32, height: u32) -> RenderParams {
 
 impl Gpu {
     pub fn new() -> Self {
-        Gpu { ctx: RenderContext::new(), renderers: Vec::new() }
+        Gpu { ctx: RenderContext { instance: instance(), devices: Vec::new() }, renderers: Vec::new() }
     }
 
     fn renderer(&mut self, dev_id: usize) -> Result<&mut Renderer, String> {
@@ -281,19 +281,45 @@ pub enum Kind {
     Cpu,
 }
 
-fn instance() -> wgpu::Instance {
+fn make_instance(backends: wgpu::Backends) -> wgpu::Instance {
     wgpu::Instance::new(wgpu::InstanceDescriptor {
         display: None,
-        backends: wgpu::Backends::from_env().unwrap_or_default(),
+        backends,
         flags: wgpu::InstanceFlags::from_build_config().with_env(),
         memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         backend_options: wgpu::BackendOptions::from_env_or_default(),
     })
 }
 
+fn instance() -> wgpu::Instance {
+    make_instance(backends())
+}
+
+/// The graphics interfaces to use. WGPU_BACKEND overrides it. On Windows Vulkan alone when it offers a
+/// real graphics card: setting up all interfaces costs seconds before the first frame (Intel Arc 140V:
+/// 4.8 s instead of 1.4 s to the first frame), and Direct3D 12 compiles its shaders for another 12 s.
+/// Without a Vulkan driver everything is tried as before.
+fn backends() -> wgpu::Backends {
+    static CHOSEN: std::sync::OnceLock<wgpu::Backends> = std::sync::OnceLock::new();
+    *CHOSEN.get_or_init(|| {
+        if let Some(b) = wgpu::Backends::from_env() {
+            return b;
+        }
+        if cfg!(windows) {
+            let vk = make_instance(wgpu::Backends::VULKAN);
+            if let Ok(a) = pollster::block_on(vk.request_adapter(&wgpu::RequestAdapterOptions::default())) {
+                if a.get_info().device_type != wgpu::DeviceType::Cpu {
+                    return wgpu::Backends::VULKAN;
+                }
+            }
+        }
+        wgpu::Backends::default()
+    })
+}
+
 /// Every graphics adapter the system offers, as text (for the self test).
 pub fn adapters() -> Vec<String> {
-    pollster::block_on(instance().enumerate_adapters(wgpu::Backends::all()))
+    pollster::block_on(make_instance(wgpu::Backends::all()).enumerate_adapters(wgpu::Backends::all()))
         .iter()
         .map(|a| {
             let i = a.get_info();

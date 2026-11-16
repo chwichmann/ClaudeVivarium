@@ -386,7 +386,7 @@ pub fn selftest_lines() -> Vec<String> {
     ]
 }
 
-pub fn settings() -> Result<(), String> {
+pub fn settings(_owner: Option<isize>) -> Result<(), String> {
     let p = config::path();
     Command::new("open").arg("-t").arg(&p).status().map_err(|e| e.to_string())?;
     Ok(())

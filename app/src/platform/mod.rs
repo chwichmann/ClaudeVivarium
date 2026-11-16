@@ -7,6 +7,8 @@ pub mod linux;
 pub mod macos;
 #[cfg(windows)]
 pub mod windows;
+#[cfg(windows)]
+mod windows_settings;
 
 #[cfg(target_os = "linux")]
 pub use linux as os;
