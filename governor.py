@@ -35,7 +35,9 @@ class Governor:
 
     @property
     def fps(self):
-        return self.levels[self.level] if self.enabled else self.base_fps
+        # switched off = always the best level ("full speed", 30 fps). Not base_fps: GTK passes 60 there
+        # only as the timing base of its frame clock, which made it draw at 60 fps with adaptive_fps = false
+        return self.levels[self.level] if self.enabled else self.levels[0]
 
     def due(self, waited):
         """True when a new frame should be produced after `waited` seconds since the last one."""

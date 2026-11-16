@@ -42,6 +42,28 @@ MOTION_THRESHOLD = 25  # px of mouse movement that counts as "wake up"
 GRACE = 1.0            # s after start during which input is ignored (avoids instant wake)
 
 
+BENCH = None  # --bench: {"seconds", "work": [...], "gaps": [...], "t0", "cpu0"}
+BENCH_FPS = 30
+
+
+def bench_report(show, size):
+    """Same figures as vivarium_mac.py --bench and 'claude-vivarium-rs bench', for comparing them.
+    (GTK hands the picture to the compositor after on_draw, so 'frame' is update + Cairo drawing.)"""
+    work, gaps = BENCH["work"][5:], BENCH["gaps"][5:]
+    if not work:
+        print("bench: no frames")
+        return
+    cpu = time.process_time() - BENCH["cpu0"]
+    wall = time.perf_counter() - BENCH["t0"]
+    ws = sorted(work)
+    late = sum(1 for g in gaps if g > 1.5 / BENCH_FPS)
+    print(f"bench python (gtk): theme={show.name} size={size[0]}x{size[1]} target={BENCH_FPS} fps seconds={wall:.1f}")
+    print(f"  frames={len(work)}  fps={len(work) / wall:.1f}  frame avg={sum(work) / len(work) * 1000:.2f} ms  "
+          f"p95={ws[int(len(ws) * 0.95)] * 1000:.2f} ms  max={ws[-1] * 1000:.2f} ms  "
+          f"late={late} ({late / len(work) * 100:.1f} %)")
+    print(f"  process CPU: {cpu / wall * 100:.1f} % of one core ({cpu:.2f} s CPU in {wall:.1f} s)", flush=True)
+
+
 class Screensaver(Gtk.Application):
     def __init__(self, opts):
         super().__init__(application_id="io.github.ClaudeVivarium", flags=Gio.ApplicationFlags.NON_UNIQUE)
@@ -57,7 +79,11 @@ class Screensaver(Gtk.Application):
         self.last_frame = None
         # GTK ticks at the display refresh (60 Hz or more); 30 fps is plenty, and less on a busy computer
         self.gov = governor.Governor(base_fps=60, levels=(30, 20, 15))
+        if BENCH is not None:  # benchmark: exactly 30 fps, like the other front ends
+            self.gov = governor.Governor(base_fps=60, levels=(BENCH_FPS,), enabled=True)
         self.update_cost = 0.0
+        self.frame_gap = 0.0
+        self.draw_size = (0, 0)
         self.bus = None
         self.lock_deadline = 0.0
         self.win = None
@@ -95,7 +121,9 @@ class Screensaver(Gtk.Application):
         win.connect("notify::is-active", self.on_active_changed)
         win.connect("close-request", self.on_close_request)
 
-        if self.opts.windowed:
+        if self.opts.windowed and self.opts.size:
+            area.set_size_request(*self.opts.size)  # the drawing area gets exactly this size
+        elif self.opts.windowed:
             win.set_default_size(1280, 800)
         else:
             win.fullscreen()
@@ -137,6 +165,11 @@ class Screensaver(Gtk.Application):
                 self.scene.set_system(self.monitor.get())
             except Exception as e:
                 log(f"reading system stats failed: {e!r}")
+        if BENCH is not None:  # the same made-up history every time, so runs are comparable
+            if "system" not in BENCH:
+                import render_preview
+                BENCH["system"] = render_preview.fake_system()
+            self.scene.set_system(BENCH["system"])
         return not self.exiting
 
     def on_tick(self, widget, clock):
@@ -147,14 +180,27 @@ class Screensaver(Gtk.Application):
             t0 = time.perf_counter()
             self.scene.update(now - self.last_frame)
             self.update_cost = time.perf_counter() - t0
+            self.frame_gap = now - self.last_frame
             self.last_frame = now
             widget.queue_draw()
+        if BENCH is not None:
+            if len(BENCH["work"]) == 5 and not BENCH["t0"]:  # start measuring after the first frames
+                BENCH["cpu0"], BENCH["t0"] = time.process_time(), time.perf_counter()
+            if time.monotonic() - self.started > BENCH["seconds"] and not self.exiting:
+                bench_report(self.scene, self.draw_size)
+                self.exiting = True
+                self.quit()
         return True
 
     def on_draw(self, _area, cr, w, h):
         t0 = time.perf_counter()
         self.scene.draw(cr, w, h)
-        self.gov.record(self.update_cost + time.perf_counter() - t0)
+        cost = self.update_cost + time.perf_counter() - t0
+        self.gov.record(cost)
+        self.draw_size = (w, h)
+        if BENCH is not None:
+            BENCH["work"].append(cost)
+            BENCH["gaps"].append(self.frame_gap)
 
     # ---------------------------------------------------------------- input
     def in_grace(self):
@@ -263,7 +309,18 @@ def main():
     ap.add_argument("--theme-minutes", type=float, default=cfg["theme_minutes"])
     ap.add_argument("--no-system-monitor", dest="system_monitor", action="store_false",
                     default=cfg["system_monitor"], help="hide the CPU/memory panel")
+    ap.add_argument("--bench", type=float, metavar="SECONDS",
+                    help="measure CPU use and frame times in a window with made-up sessions "
+                         "(same figures as 'claude-vivarium-rs bench')")
+    ap.add_argument("--size", type=lambda v: tuple(int(x) for x in v.split("x")), default=None,
+                    help="window drawing area, e.g. 1680x1050")
     opts = ap.parse_args()
+    if opts.bench:  # fixed theme, made-up sessions and monitor data, 30 fps, no lock
+        global BENCH
+        BENCH = {"seconds": opts.bench, "work": [], "gaps": [], "t0": 0.0, "cpu0": 0.0}
+        opts.windowed, opts.demo, opts.no_lock = True, True, True
+        opts.theme_minutes, opts.system_monitor = 0, False
+        opts.size = opts.size or (1680, 1050)
     app = Screensaver(opts)
     app.run([sys.argv[0]])
     sys.exit(app.exit_code)

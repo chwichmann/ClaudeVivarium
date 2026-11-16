@@ -96,6 +96,7 @@ user32.ValidateRect.argtypes = [wintypes.HWND, wintypes.LPVOID]
 user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
 user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, wintypes.LPVOID, wintypes.UINT]
+user32.AdjustWindowRectEx.argtypes = [ctypes.POINTER(wintypes.RECT), wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
 user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.SendMessageW.restype = LRESULT
 user32.GetDesktopWindow.restype = wintypes.HWND
@@ -174,6 +175,26 @@ def monitors():
     return sorted(found, key=lambda m: not m[4])  # primary first
 
 
+BENCH = None  # --bench: {"seconds", "work": [...], "gaps": [...], "t0", "cpu0"}
+
+
+def bench_report(show, size):
+    """Same figures as vivarium_mac.py --bench and 'claude-vivarium-rs bench', for comparing them."""
+    work, gaps = BENCH["work"][5:], BENCH["gaps"][5:]
+    if not work:
+        print("bench: no frames")
+        return
+    cpu = time.process_time() - BENCH["cpu0"]
+    wall = time.perf_counter() - BENCH["t0"]
+    ws = sorted(work)
+    late = sum(1 for g in gaps if g > 1.5 / FPS)
+    print(f"bench python (windows): theme={show.name} size={size[0]}x{size[1]} target={FPS} fps seconds={wall:.1f}")
+    print(f"  frames={len(work)}  fps={len(work) / wall:.1f}  frame avg={sum(work) / len(work) * 1000:.2f} ms  "
+          f"p95={ws[int(len(ws) * 0.95)] * 1000:.2f} ms  max={ws[-1] * 1000:.2f} ms  "
+          f"late={late} ({late / len(work) * 100:.1f} %)")
+    print(f"  process CPU: {cpu / wall * 100:.1f} % of one core ({cpu:.2f} s CPU in {wall:.1f} s)", flush=True)
+
+
 class Canvas:
     """One window and the Cairo image it shows. The scene can be rendered at a different size (preview)."""
 
@@ -227,6 +248,9 @@ class Canvas:
         self.blit()
         if self.show is not None:
             self.gov.record(time.perf_counter() - t0)
+            if BENCH is not None and not self.threaded:
+                BENCH["work"].append(time.perf_counter() - t0)
+                BENCH["gaps"].append(dt)
 
     def blit(self):
         self.img.flush()
@@ -303,9 +327,12 @@ class App:
             self.main_show = self.make_show()
             self.canvases.append(Canvas(hwnd, self.main_show, render_size=(800, 500)))
         else:
+            cw, ch = self.opts.get("size", (1424, 861))
+            rc = wintypes.RECT(0, 0, cw, ch)  # the drawing area gets exactly this size
+            user32.AdjustWindowRectEx(ctypes.byref(rc), WS_OVERLAPPEDWINDOW, False, 0)
             hwnd = user32.CreateWindowExW(0, APP_NAME, "Claude Vivarium (preview - N: next theme, Esc: close)",
-                                          WS_OVERLAPPEDWINDOW | WS_VISIBLE, 80, 80, 1440, 900, None, None,
-                                          self.hinst, None)
+                                          WS_OVERLAPPEDWINDOW | WS_VISIBLE, 40, 40, rc.right - rc.left,
+                                          rc.bottom - rc.top, None, None, self.hinst, None)
             self.main_show = self.make_show()
             self.canvases.append(Canvas(hwnd, self.main_show))
 
@@ -392,6 +419,11 @@ class App:
                 system = self.monitor.get()
             except Exception as e:
                 log(f"reading system stats failed: {e!r}")
+        if BENCH is not None:  # the same made-up history every time, so runs are comparable
+            if "system" not in BENCH:
+                import render_preview
+                BENCH["system"] = render_preview.fake_system()
+            system = BENCH["system"]
         for c in self.canvases:
             if c.show is not None:
                 with c.lock:
@@ -461,6 +493,12 @@ class App:
                             c.render(dt)
                 stats_n += 1
                 frames += 1
+                if BENCH is not None:
+                    if len(BENCH["work"]) == 5 and not BENCH["t0"]:  # start measuring after the first frames
+                        BENCH["cpu0"], BENCH["t0"] = time.process_time(), time.perf_counter()
+                    if time.monotonic() - self.started > BENCH["seconds"]:
+                        bench_report(self.main_show, self.canvases[0].size)
+                        self.quit("bench done")
                 if test and time.monotonic() - self.started > test_secs:
                     os.makedirs(test_dir, exist_ok=True)
                     secs = time.monotonic() - self.started
@@ -586,11 +624,20 @@ def main():
     elif a0.startswith("/p") or a0.startswith("-p"):
         hwnd = a0.split(":", 1)[1] if ":" in a0 else (args[1] if len(args) > 1 else "0")
         App("preview", {}, cfg, parent=wintypes.HWND(int(hwnd))).run()
-    elif a0 == "--windowed":
+    elif a0 in ("--windowed", "--bench"):
         dpi_aware()
         opts = {"demo": "--demo" in args}
         if "--themes" in args:
             opts["themes"] = args[args.index("--themes") + 1]
+        if "--size" in args:
+            opts["size"] = tuple(int(v) for v in args[args.index("--size") + 1].split("x"))
+        if a0 == "--bench":  # fixed theme, made-up sessions and monitor data, full frame rate
+            global BENCH
+            BENCH = {"seconds": float(args[1]) if len(args) > 1 and args[1][0].isdigit() else 30.0,
+                     "work": [], "gaps": [], "t0": 0.0, "cpu0": 0.0}
+            cfg.update(theme_minutes=0, adaptive_fps=False, system_monitor=False)
+            opts["demo"] = True
+            opts.setdefault("size", (1680, 1050))
         App("windowed", opts, cfg).run()
     elif a0 == "--record":
         record()

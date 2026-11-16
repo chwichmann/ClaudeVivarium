@@ -59,6 +59,8 @@ vivarium_mac.py    macOS: full-screen windows via PyObjC, locks on wake, --selft
 vivariumd_mac.py   macOS: idle agent (LaunchAgent) + CPU/memory recorder
 render_preview.py  render themes to PNG without a display (testing)
 benchmark.py       time update()/draw() per theme, optional cProfile (performance work)
+                   window benchmark: vivarium_win.py --bench 15 --themes synthwave,
+                   vivarium_gtk.py --bench 15 --themes synthwave (same figures as claude-vivarium-rs bench)
 ```
 
 ### Linux (Ubuntu, GNOME on Wayland)
