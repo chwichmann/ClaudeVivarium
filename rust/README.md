@@ -83,7 +83,7 @@ cargo build --release        # -> target/release/claude-vivarium-rs
 cargo test
 ```
 
-Every push to the `rust-rewrite` branch also builds all three platforms on GitHub (Actions > "Rust
+Every push to `main` (and to `rust-rewrite`) that touches `rust/` builds all three platforms on GitHub (Actions > "Rust
 version"); the programs can be downloaded from the run.
 
 ## Try it
