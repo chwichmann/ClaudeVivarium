@@ -6,6 +6,9 @@ LOCKS THE SCREEN FIRST on any key, click or focus loss and only then closes (fai
 never becomes the active app it locks right away).
 
   --windowed [--demo] [--themes x]   test in a normal window (N/Right/Space = next theme, Esc = close)
+  --bench SECONDS [--themes x] [--size WxH]
+                                     measure CPU use and frame times in a window with made-up sessions
+                                     (same figures as 'claude-vivarium-rs bench', for comparing both)
   --selftest                         check fonts, sessions, CPU/memory, idle time, lock state; writes
                                      PNGs to ~/Desktop/vivarium-selftest (send me the output if
                                      something does not work)
@@ -103,6 +106,27 @@ class VivView(NSView):
         Quartz.CGContextDrawImage(ctx, self.bounds(), img)
 
 
+BENCH = None  # --bench: {"seconds", "work": [...], "gaps": [...], "t0", "cpu0"}
+
+
+def bench_report(show, size):
+    import resource
+    work, gaps = BENCH["work"][5:], BENCH["gaps"][5:]
+    if not work:
+        print("bench: no frames")
+        return
+    ru = resource.getrusage(resource.RUSAGE_SELF)
+    cpu = ru.ru_utime + ru.ru_stime - BENCH["cpu0"]
+    wall = time.perf_counter() - BENCH["t0"]
+    ws = sorted(work)
+    late = sum(1 for g in gaps if g > 1.5 / FPS)
+    print(f"bench python: theme={show.name} size={size[0]}x{size[1]} target={FPS} fps seconds={wall:.1f}")
+    print(f"  frames={len(work)}  fps={len(work) / wall:.1f}  frame avg={sum(work) / len(work) * 1000:.2f} ms  "
+          f"p95={ws[int(len(ws) * 0.95)] * 1000:.2f} ms  max={ws[-1] * 1000:.2f} ms  "
+          f"late={late} ({late / len(work) * 100:.1f} %)")
+    print(f"  process CPU: {cpu / wall * 100:.1f} % of one core ({cpu:.2f} s CPU in {wall:.1f} s)", flush=True)
+
+
 class Canvas:
     """One window: renders its Show with Cairo and hands the pixels to the view as a CGImage."""
     colorspace = Quartz.CGColorSpaceCreateDeviceRGB()
@@ -146,6 +170,9 @@ class Canvas:
         self.view.setNeedsDisplay_(True)
         if self.show is not None:
             self.gov.record(time.perf_counter() - t0)
+            if BENCH is not None:
+                BENCH["work"].append(time.perf_counter() - t0)
+                BENCH["gaps"].append(dt)
 
 
 class Controller(NSObject):
@@ -230,7 +257,8 @@ class App:
             # keep the display awake while we are visible (like the GNOME inhibitor)
             self.caffeinate = subprocess.Popen(["caffeinate", "-d", "-w", str(os.getpid())])
         else:
-            win, view = self._window(NSMakeRect(100, 100, 1280, 800), STYLE_TITLED_WINDOW, 0)
+            ww, wh = self.opts.get("size", (1280, 800))
+            win, view = self._window(NSMakeRect(100, 100, ww, wh), STYLE_TITLED_WINDOW, 0)
             win.setTitle_("Claude Vivarium (preview - N: next theme, Esc: close)")
             self.main_show = self.make_show()
             view.canvas = Canvas(view, self.main_show)
@@ -308,6 +336,11 @@ class App:
                 system = self.monitor.get()
             except Exception as e:
                 log(f"reading system stats failed: {e!r}")
+        if BENCH is not None:  # the same made-up history every time, so runs are comparable
+            if "system" not in BENCH:
+                import render_preview
+                BENCH["system"] = render_preview.fake_system()
+            system = BENCH["system"]
         for c in self.canvases:
             if c.show is not None:
                 c.show.set_sessions(data)
@@ -335,6 +368,14 @@ class App:
                     time.monotonic() - self.started > self.cfg["max_minutes"] * 60:
                 self.wake("max time reached")
                 return
+            if BENCH is not None:
+                if len(BENCH["work"]) == 5:  # start measuring after the first frames
+                    import resource
+                    ru = resource.getrusage(resource.RUSAGE_SELF)
+                    BENCH["cpu0"], BENCH["t0"] = ru.ru_utime + ru.ru_stime, time.perf_counter()
+                if time.monotonic() - self.started > BENCH["seconds"]:
+                    bench_report(self.main_show, self.canvases[0].size)
+                    self.finish(0)
             if now >= self.next_refresh:
                 self.refresh()
                 self.next_refresh = now + 1.0
@@ -380,7 +421,7 @@ def selftest():
     y = 10
     for name, wgt in (("LIGHT", scene.Weight.LIGHT), ("NORMAL", scene.Weight.NORMAL),
                       ("SEMIBOLD", scene.Weight.SEMIBOLD), ("BOLD", scene.Weight.BOLD)):
-        lay = t.layout(cr, f"{name}: Netdocs Dev 1 · working · 3m 05s ● “quoted”", 26, wgt)
+        lay = t.layout(cr, f"{name}: Web shop · working · 3m 05s ● “quoted”", 26, wgt)
         w, h = lay.get_pixel_size()
         print(f"  font {name:8s} {t.FACES[wgt][0] if hasattr(t, 'FACES') else ''}: {w}x{h} px")
         scene.Text.show(cr, lay, 10, y, (1, 1, 1), 1)
@@ -421,6 +462,15 @@ def main():
         selftest()
         return
     opts = {"demo": "--demo" in args, "no_lock": "--no-lock" in args}
+    if "--size" in args:
+        opts["size"] = tuple(int(v) for v in args[args.index("--size") + 1].split("x"))
+    if "--bench" in args:  # fixed theme, made-up sessions and monitor data, full frame rate
+        global BENCH
+        BENCH = {"seconds": float(args[args.index("--bench") + 1]), "work": [], "gaps": [], "t0": 0.0, "cpu0": 0.0}
+        cfg.update(theme_minutes=0, adaptive_fps=False, system_monitor=False)
+        opts["demo"] = True
+        opts.setdefault("size", (1680, 1050))
+        args.append("--windowed")
     if "--themes" in args:
         opts["themes"] = args[args.index("--themes") + 1]
     App("windowed" if "--windowed" in args else "full", opts, cfg).run()

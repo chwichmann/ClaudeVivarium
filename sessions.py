@@ -232,7 +232,7 @@ def read_sessions():
 
 _DEMO_START = time.time()
 _DEMO = [
-    ("Netdocs Test 3", "~/dev/netdocs", 0),
+    ("Web shop", "~/dev/webshop", 0),
     ("Screensaver", "~/dev/claude-screensaver", 13),
     ("Infra audit", "~/dev/infra", 27),
 ]
@@ -279,7 +279,7 @@ def demo_sessions(t=None):
                           if i == 0 and state == "working" else []),
         })
     out.append({  # a test bench: turn finished, suite still running as a background task
-        "id": "demo-bg", "pid": 1099, "name": "Test bench", "cwd": "~/dev/netdocs",
+        "id": "demo-bg", "pid": 1099, "name": "Test bench", "cwd": "~/dev/webshop",
         "status": "shell", "state": "working", "background": True,
         "bg_task": "Wait for all test rows to finish", "waiting_for": "",
         "since": now - (t % 900) - 120, "started": now - 7200,

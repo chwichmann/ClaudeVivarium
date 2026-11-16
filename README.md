@@ -4,6 +4,10 @@ A screensaver that shows the live state of your local [Claude Code](https://clau
 as creatures in a vivarium. Runs on **Ubuntu/GNOME (Wayland)** and **Windows**; **macOS** support is
 prepared but not tested yet (see below).
 
+> **Rust version.** The `rust/` folder holds a rewrite that draws on the graphics card and installs as
+> a single program per platform. See [rust/README.md](rust/README.md) for its status, how to build it
+> and how to compare it with this Python version.
+
 Every session is one creature. The state colour is the same in every theme:
 
 | State | Colour | Behaviour |
@@ -61,6 +65,7 @@ render_preview.py  render themes to PNG without a display (testing)
 benchmark.py       time update()/draw() per theme, optional cProfile (performance work)
                    window benchmark: vivarium_win.py --bench 15 --themes synthwave,
                    vivarium_gtk.py --bench 15 --themes synthwave (same figures as claude-vivarium-rs bench)
+rust/              the Rust version (GPU), see rust/README.md
 ```
 
 ### Linux (Ubuntu, GNOME on Wayland)
