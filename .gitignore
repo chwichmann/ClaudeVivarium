@@ -1,8 +1,10 @@
+target/
+dist/
+preview/
+claude-vivarium-rs
+
+# Python leftovers from before the move to Rust
 __pycache__/
-*.pyc
 .venv/
 build/
-dist/
-*.spec
-preview/
 *.png

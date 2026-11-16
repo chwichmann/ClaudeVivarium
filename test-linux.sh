@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Functional test of the Rust version on Linux (also works on macOS). Put this file next to the program
-# "claude-vivarium-rs" (or run it from rust/ after "cargo build --release") and start it in a terminal
+# "claude-vivarium-rs" (or run it from the repository after "cargo build --release") and start it in a terminal
 # inside the desktop session. Nothing is installed and the screen is not locked.
 # Results: the folder "vivarium-test" next to this file (test.log and PNG files).
 set -u

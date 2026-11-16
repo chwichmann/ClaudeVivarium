@@ -1,11 +1,11 @@
-name: Rust version
+name: Build
 
 on:
   push:
-    branches: [main, rust-rewrite]
-    paths: ["rust/**", ".github/workflows/rust.yml"]
+    branches: [main]
+    paths: ["app/**", "core/**", "themes/**", "Cargo.toml", "Cargo.lock", "*.sh", "*.ps1", "*.cmd", "*.service", ".github/workflows/rust.yml"]
   pull_request:
-    paths: ["rust/**", ".github/workflows/rust.yml"]
+    paths: ["app/**", "core/**", "themes/**", "Cargo.toml", "Cargo.lock", "*.sh", "*.ps1", "*.cmd", "*.service", ".github/workflows/rust.yml"]
   workflow_dispatch:
 
 # attestations: a signed statement that a downloaded program was built by this workflow from this
@@ -37,17 +37,12 @@ jobs:
             name: windows-arm64
             binary: claude-vivarium-rs.exe
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: rust
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
       - name: Tests
         run: cargo test --release
       - name: Clippy
@@ -77,18 +72,18 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            rust/target/release/${{ matrix.binary }}
-            rust/target/release/ClaudeVivariumRS.scr
+            target/release/${{ matrix.binary }}
+            target/release/ClaudeVivariumRS.scr
       - uses: actions/upload-artifact@v4
         with:
           name: claude-vivarium-rs-${{ matrix.name }}
           path: |
-            rust/target/release/${{ matrix.binary }}
-            rust/target/release/ClaudeVivariumRS.scr
-            rust/install-mac.sh
-            rust/install-linux.sh
-            rust/test-windows.cmd
-            rust/test-linux.sh
-            rust/claude-vivarium-rs.service
-            rust/preview/*.png
+            target/release/${{ matrix.binary }}
+            target/release/ClaudeVivariumRS.scr
+            install-mac.sh
+            install-linux.sh
+            test-windows.cmd
+            test-linux.sh
+            claude-vivarium-rs.service
+            preview/*.png
           if-no-files-found: warn

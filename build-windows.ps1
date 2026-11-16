@@ -1,23 +1,18 @@
-# Build Claude Vivarium for Windows into dist\ClaudeVivarium\ and optionally install it.
-#   .\build-windows.ps1            build only
+# Build the Rust version of Claude Vivarium for Windows and optionally install it.
+#   .\build-windows.ps1            build only  ->  dist\ClaudeVivariumRS.scr
 #   .\build-windows.ps1 -Install   build and install for the current user (no admin rights needed)
+# Needs Rust (https://rustup.rs) with the Visual Studio C++ build tools.
 param([switch]$Install)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-if (-not (Test-Path .venv\Scripts\python.exe)) {
-    python -m venv .venv
-}
-.venv\Scripts\python -m pip install -q --disable-pip-version-check pycairo pyinstaller
-
-$hidden = "theme_aquarium","theme_space","theme_synthwave","theme_pasture","theme_seabed","theme_forest","theme_guppies","theme_terrarium","theme_meerkats","theme_espresso","theme_archipelago" |
-    ForEach-Object { "--hidden-import=$_" }
-.venv\Scripts\pyinstaller --noconfirm --clean --onedir --noconsole --name ClaudeVivarium `
-    --distpath dist --workpath build $hidden vivarium_win.py
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
-Copy-Item dist\ClaudeVivarium\ClaudeVivarium.exe dist\ClaudeVivarium\ClaudeVivarium.scr -Force
-Write-Host "Built: dist\ClaudeVivarium\ClaudeVivarium.scr"
+cargo build --release
+if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+New-Item -ItemType Directory -Force dist | Out-Null
+Copy-Item target\release\claude-vivarium-rs.exe dist\ClaudeVivariumRS.exe -Force
+Copy-Item target\release\claude-vivarium-rs.exe dist\ClaudeVivariumRS.scr -Force
+Write-Host "Built: dist\ClaudeVivariumRS.scr"
 
 if ($Install) {
-    & dist\ClaudeVivarium\ClaudeVivarium.exe --install | Out-Host
+    Start-Process -Wait dist\ClaudeVivariumRS.exe -ArgumentList "--install"
 }

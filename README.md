@@ -1,114 +1,154 @@
 # Claude Vivarium
 
-A screensaver that shows the live state of your local [Claude Code](https://claude.com/claude-code) sessions -
-as creatures in a vivarium. Runs on **Ubuntu/GNOME (Wayland)** and **Windows**; **macOS** support is
-prepared but not tested yet (see below).
-
-> **Rust version.** The `rust/` folder holds a rewrite that draws on the graphics card and installs as
-> a single program per platform. See [rust/README.md](rust/README.md) for its status, how to build it
-> and how to compare it with this Python version.
+A screensaver that shows the live state of your local [Claude Code](https://claude.com/claude-code)
+sessions - as creatures in a vivarium. Written in Rust: every theme is drawn on the graphics card
+(Metal on macOS, Vulkan or Direct3D 12 on Windows, Vulkan on Linux), and the whole program is one file
+per platform with nothing else to install.
 
 Every session is one creature. The state colour is the same in every theme:
 
 | State | Colour | Behaviour |
 |---|---|---|
-| working | teal | moves briskly; every tool call floats up with its name |
+| working | teal | moves briskly; every tool call shows up with its name |
 | idle | blue | slow, grazes / rests |
 | needs you (waiting for permission/input) | amber | comes to the front, pulsing rings, banner at the top |
+| background (turn finished, a background task such as a test suite still runs) | violet | moves like working; the label shows the task |
 | blocked | red | flickers |
-| background (turn finished, a background task such as a test suite still runs) | violet | moves like working; the label shows the background task |
 
-Running **sub-agents** appear as small companions in the working colour: baby jellyfish, moons, lambs,
-baby crabs, fawns, fry, meerkat pups, little pots, mini cubes, baby chameleons, seagulls over the island.
-The label lists them ("2 sub-agents: ...") and the status strip shows "+2 agents".
+Running **sub-agents** appear as small companions (baby jellyfish, lambs, moons, calves, ...), the label
+lists them and the status strip shows "+2 agents". With no session running, a resting creature appears.
+A status strip lists all sessions with their state and a clock; a small panel shows CPU % and memory
+with a 30-minute graph. Everything drifts slowly (no burn-in).
 
-Eleven themes rotate in random order (default every 10 minutes, fade through black):
+**Themes** (random order, a new one every 10 minutes): aquarium, archipelago, capricorns, cockroaches,
+dolphins, espresso, forest, gorillas, guppies, meerkats, pasture, penguins, seabed, space, synthwave,
+terrarium - plus the seasonal **halloween** (1 Oct - 2 Nov) and **workshop** (1 Dec - 6 Jan), which can
+also be named at any time.
 
-| Theme | Sessions are | Tool calls |
-|---|---|---|
-| aquarium | glowing jellyfish in the deep sea | rising bubbles |
-| space | planets orbiting a Claude-orange star | meteors |
-| synthwave | neon wireframe cubes over an 80s grid | glitchy neon text |
-| pasture | sheep - one session one sheep, many a flock | the sheep hops |
-| seabed | crabs scuttling sideways | claw snap + bubble |
-| forest | deer with a rim light in a moonlit clearing | fireflies |
-| guppies | guppies - working sessions are colourful males, idle ones plain females | bubbles |
-| terrarium | chameleons on branches, coloured in the state colour | tongue strike at a fly |
-| meerkats | meerkats at sunset; the one that needs you stands sentinel | digging, sand flies |
-| espresso | winged espresso pots gliding through a starry night, coffee beans tumbling by | steam puffs |
-| archipelago | one island per session with a castaway; the sky follows the real time of day | message in a bottle |
+## Status
 
-Also on screen: a status strip with all sessions, time in state and a clock; a small panel with CPU %
-and memory GB and a 30-minute graph. With no session running, a resting creature appears (a sleeping
-sheep, a crab buried in the sand, a deer lying down, ...). Everything drifts slowly (no burn-in).
+| Platform | Tested |
+|---|---|
+| macOS (M1) | window, full screen, self test, benchmarks, both renderers, idle agent, hotkey, lock path (key press -> locked within a second -> closed) |
+| Windows 11 x86 (Intel Arc 140V) | GPU renderer (picks Vulkan; Direct3D 12 also works), self test, benchmark, full screen on two monitors, installation as the screen saver with recorder and Ctrl+Alt+V. The logon screen on resume and the preview pane are not confirmed yet |
+| Windows 11 ARM (virtual machine) | CPU renderer: window, full screen `/s`, self test, benchmark |
+| Ubuntu 24.04 / 26.04 x86 (Intel Iris Xe, GNOME on Wayland) | GPU renderer via Vulkan, self test, benchmark, idle start after `idle_seconds`, lock path (key press -> locked within a second -> closed) |
+
+Known limitations:
+
+- **GNOME needs a second key press after waking.** GNOME fades to black right after a programmatic lock
+  and only wakes up on new input; it blocks the virtual input (remote desktop API) that could do this
+  while the screen is locked. The attempt is made and fails harmlessly ("Session creation inhibited").
+- On a locked Linux screen the Rust version keeps drawing (about 8 % of one core) although nothing is shown.
+- Forcing the GPU renderer onto Windows' software adapter ("Microsoft Basic Render Driver") crashes.
+
+**Two renderers.** With a real graphics card the program draws on the GPU. Without one - or when the
+system only offers a software stand-in for a GPU, as in virtual machines and some remote desktop
+sessions - it draws on the CPU instead (slower; above 2.6 megapixels at half size). `selftest` shows the
+adapters and the choice; `--renderer gpu|cpu` forces one.
 
 ## How it works
 
-Claude Code writes `~/.claude/sessions/<pid>.json` (name, folder, status) for every running session and
-a transcript `~/.claude/projects/*/<sessionId>.jsonl`. Claude Vivarium only **reads** these files.
+Claude Code writes `~/.claude/sessions/<pid>.json` (name, folder, status) for every running session, a
+transcript `~/.claude/projects/*/<sessionId>.jsonl` and, for sub-agents, `.../subagents/agent-<id>.meta.json`.
+Claude Vivarium only **reads** these files.
 
+- **Linux (GNOME on Wayland):** GNOME has no screensaver plug-in API and does not show app windows on
+  the lock screen. The idle watcher (`claude-vivarium-rs daemon`, a systemd user service) starts the
+  screensaver after `idle_seconds`, before GNOME blanks, and records CPU/memory every 5 s. On a key,
+  click or focus loss the screensaver **locks the screen first**, waits until GNOME confirms, then
+  closes; if it ever ends unlocked, the watcher locks (fail closed).
+- **Windows:** a real screen saver (`ClaudeVivariumRS.scr`). Windows starts it on idle and, with
+  "On resume, display logon screen", locks on wake itself. Windows does not run screen savers on a
+  locked PC, so **Ctrl+Alt+V** ("start now") starts it right away instead of Win+L.
+- **macOS:** a LaunchAgent starts it on idle; it locks first on wake like on Linux.
+  **Ctrl+Option+V** starts it right away.
+
+While it runs, **right arrow** switches to the next theme and **down arrow** (also up arrow, Tab or T)
+opens the **theme picker**; every other key or click ends it (and locks).
+
+## Build
+
+Needs Rust (https://rustup.rs). On Windows also the Visual Studio C++ build tools, on Ubuntu
+`sudo apt install build-essential`.
+
+```bash
+cargo build --release        # -> target/release/claude-vivarium-rs
+cargo test
 ```
-sessions.py        reads session state + recent tool calls        (all platforms)
-sysmon.py          CPU / memory history                            (all platforms)
-config.py          settings file                                   (all platforms)
-governor.py        adaptive frame rate on a busy computer          (all platforms)
-scene.py           shared drawing: labels, banner, strip, panel    (all platforms, Cairo)
-theme_*.py         one file per theme                              (all platforms)
-themes.py          theme registry + random rotation                (all platforms)
-vivarium_gtk.py    Linux: full-screen GTK4 window, locks on wake
-vivariumd.py       Linux: idle watcher (systemd user service) + CPU/memory recorder
-gnome.py           Linux: GNOME D-Bus helpers (lock, idle, inhibit)
-vivarium_win.py    Windows: the .scr screensaver (/s /p /c), recorder, installer
-vivarium_mac.py    macOS: full-screen windows via PyObjC, locks on wake, --selftest
-vivariumd_mac.py   macOS: idle agent (LaunchAgent) + CPU/memory recorder
-render_preview.py  render themes to PNG without a display (testing)
-benchmark.py       time update()/draw() per theme, optional cProfile (performance work)
-                   window benchmark: vivarium_win.py --bench 15 --themes synthwave,
-                   vivarium_gtk.py --bench 15 --themes synthwave (same figures as claude-vivarium-rs bench)
-rust/              the Rust version (GPU), see rust/README.md
+
+Every push to `main` that touches the code or the scripts builds Linux, macOS and Windows (x86 and ARM)
+on GitHub (Actions > "Build"); the programs can be downloaded from the run. The builds are attested:
+`gh attestation verify <file> --repo chwichmann/ClaudeVivarium`.
+
+## Try it
+
+```bash
+claude-vivarium-rs run --windowed --demo        # preview; N / Right / Space = next theme, Esc = close
+claude-vivarium-rs run --windowed               # your real sessions
+claude-vivarium-rs selftest                     # fonts, sessions, CPU/memory, graphics card, PNGs of all themes
+claude-vivarium-rs sessions                     # the session state as JSON
+claude-vivarium-rs render --demo --sysmon --themes all --times 6,24 --out preview    # PNGs, no window
+claude-vivarium-rs render --empty --themes all --times 6 --out preview               # the resting creatures
+claude-vivarium-rs run --demo --no-lock --max-minutes 0.2    # full screen for 12 s, closes without locking
 ```
 
-### Linux (Ubuntu, GNOME on Wayland)
+`run` without `--windowed` is the real screensaver. Options: `--themes`, `--theme-minutes`,
+`--hide-text`, `--max-minutes`, `--mouse-move hint|wake`, `--no-system-monitor`, `--no-lock`.
+`VIVARIUM_TEST="8;/tmp/shots"` saves every window as PNG after 8 s and exits.
 
-GNOME has no screensaver plug-in API and does not allow app windows on the lock screen, so:
+`test-linux.sh` (Linux, macOS) and `test-windows.cmd` run these checks in one go next to the program and
+collect a log and screenshots in a `vivarium-test` folder; they install nothing and do not lock.
 
-- `vivariumd.py` asks Mutter to signal after `idle_seconds` and starts `vivarium_gtk.py` (before GNOME
-  blanks). It also records CPU/memory every 5 s so the graph has history right away.
-- `vivarium_gtk.py` inhibits GNOME's idle blanking while visible. On a key, click, focus loss or a kill
-  signal it **locks the screen first**, waits until GNOME confirms, then closes. If it never gets focus,
-  it locks immediately. If it ever exits without the screen being locked, the daemon locks (fail closed).
-- After a wake you are at the normal lock screen; the screensaver returns after unlocking + idle time.
+On Windows the program is a GUI program: PowerShell does not wait for it. To see the output of `bench`,
+start it with redirected output (e.g. `Start-Process -Wait -RedirectStandardOutput out.txt`).
+
+## Install
+
+### macOS
+
+```bash
+./install-mac.sh                     # builds (or uses a downloaded claude-vivarium-rs next to it), installs to
+                                     # ~/Library/Application Support/ClaudeVivarium/bin, starts the idle agent
+./install-mac.sh --uninstall
+tail -f ~/Library/Logs/ClaudeVivarium.log
+```
+
+### Ubuntu (GNOME on Wayland)
+
+```bash
+./install-linux.sh                   # builds (or uses a downloaded claude-vivarium-rs next to it), installs
+                                     # ~/.local/bin/claude-vivarium-rs and the systemd user service
+./install-linux.sh --uninstall
+journalctl --user -u claude-vivarium-rs -f
+./deploy-linux.sh path/to/claude-vivarium-rs laptop1 laptop2     # copy a Linux build to other machines over SSH
+```
+
+Needs a Vulkan driver (`mesa-vulkan-drivers`, normally installed with the Ubuntu desktop).
 
 ### Windows
 
-A real Windows screensaver (`ClaudeVivarium.scr`, built with PyInstaller). Windows starts it on idle and,
-with "On resume, display logon screen", locks on wake itself. Main monitor: everything; other monitors:
-another theme as decoration (rendered in a second thread). `--record` runs at logon and keeps the
-CPU/memory history.
+```powershell
+.\build-windows.ps1 -Install         # builds dist\ClaudeVivariumRS.scr and installs it for the current user
+claude-vivarium-rs.exe --install     # or: install a downloaded build
+dist\ClaudeVivariumRS.exe --uninstall
+```
 
-### macOS (prepared, not tested yet)
-
-Same pattern as Linux: a native `.saver` bundle runs sandboxed inside Apple's screensaver host and
-could not read `~/.claude`, so instead:
-
-- `vivariumd_mac.py` runs as a LaunchAgent, checks the idle time every 2 s and starts
-  `vivarium_mac.py` after `idle_seconds` (not when locked, not when a video keeps the display awake).
-  It also records CPU/memory.
-- `vivarium_mac.py` opens a window at screen-saver level on every screen, keeps the display awake
-  (`caffeinate`), and on a key, click or focus loss **locks first** (the menu-bar "Lock Screen" call,
-  fallback `pmset displaysleepnow`), waits until macOS confirms, then closes. If the screensaver exits
-  while the screen is unlocked, the agent locks.
+Installs to `%LOCALAPPDATA%\Programs\ClaudeVivariumRS`, sets it as the screen saver (timeout =
+`idle_seconds`, "display logon screen" on), adds the CPU/memory recorder to Startup and Ctrl+Alt+V
+("start now"). Log: `%LOCALAPPDATA%\ClaudeVivarium\vivarium-rs.log`. A downloaded build is not signed,
+so Windows SmartScreen (and Gatekeeper on macOS) will ask before running it.
 
 ## Settings
 
 | Platform | File |
 |---|---|
 | Linux | `~/.config/claude-vivarium/config.ini` |
-| Windows | `%APPDATA%\ClaudeVivarium\config.ini` (the "Settings..." button in the Windows dialog opens it) |
+| Windows | `%APPDATA%\ClaudeVivarium\config.ini` (the "Settings..." button of the Windows dialog opens it) |
 | macOS | `~/Library/Application Support/ClaudeVivarium/config.ini` |
 
 ```ini
-idle_seconds = 240     # Linux: start after this much idle time (below GNOME's blank delay);
+idle_seconds = 240     # start after this much idle time (Linux, macOS; below GNOME's blank delay);
                        # Windows: used as the screen saver timeout when installing
 max_minutes = 0        # 0 = run forever (display stays on); otherwise end after N minutes
 mouse_move = hint      # hint = only show "press a key or click to unlock"; wake = end
@@ -117,73 +157,52 @@ themes = all           # all | one theme | comma list, e.g. pasture, seabed, for
                        # all except some: all, -synthwave, -space
 theme_minutes = 10     # minutes per theme, 0 = never switch
 system_monitor = true  # CPU/memory panel top right
-other_monitors = theme # theme | black  (Windows, further monitors)
-adaptive_fps = true    # lower the frame rate (30 -> 20/15 fps) while the computer is busy, back up when calm
+other_monitors = theme # theme | black  (further monitors)
+adaptive_fps = true    # lower the frame rate (25 -> 20/15 fps) while the computer is busy
 ```
 
-## Install
+`deploy-config.sh laptop1 laptop2` copies `config.ini` from this folder to Ubuntu machines.
 
-### Ubuntu (from a Windows or Linux machine with SSH access)
+## Layout
+
+```
+core/        everything without a window or GPU: sessions, settings, CPU/memory history, adaptive
+             frame rate, the shared scene (labels, banner, status strip, panel) and a drawing surface
+             with Cairo's calls (canvas.rs)
+themes/      one file per theme (themes/src/<name>.rs) and the registry (themes/src/lib.rs)
+app/         the program: GPU renderer (gpu.rs), CPU renderer (cpu.rs), window and lock logic (run.rs),
+             commands (main.rs) and platform/{macos,linux,windows}.rs
+```
+
+To add a theme: copy a small one (`themes/src/synthwave.rs`), implement `Theme` (the world) and
+`ActorT` (one creature per session), and add it to the two lists in `themes/src/lib.rs` and to the
+theme list in `core/src/config.rs`.
+
+## Performance
+
+`bench` opens a real window with one theme, made-up sessions and monitor data for a fixed time and
+prints frames per second, the time to produce a frame, late frames and the CPU time of the process:
 
 ```bash
-./deploy.sh laptop1 laptop2 laptop3   # code + config.ini, install, enable, restart
-./deploy-config.sh laptop3            # only push config.ini
+claude-vivarium-rs bench --theme synthwave --seconds 30 --fps 30
+claude-vivarium-rs bench --theme synthwave --seconds 30 --fullscreen    # native resolution
 ```
 
-Or on the machine itself: `./install.sh && systemctl --user enable --now claude-vivarium.service`.
-Needs `python3-gi`, `gir1.2-gtk-4.0`, `python3-gi-cairo` (the installer adds the last one).
+Compared with the former Python version (Cairo on the CPU, same benchmark), 1680x1050, 30 fps, process
+CPU as a share of one core:
 
-```bash
-claude-vivarium --windowed --demo                 # preview; N / Right / Space = next theme
-journalctl --user -u claude-vivarium -f           # log
-systemctl --user disable --now claude-vivarium    # turn off
-```
+| Computer | Theme | Python | Rust (GPU) |
+|---|---|---|---|
+| MacBook M1 | meerkats / synthwave / aquarium | 29 / 38 / 35 % | 16 / 17 / 16 % |
+| Windows, Core Ultra 7 268V, Arc 140V | meerkats / synthwave / aquarium | 25 / 51 / 34 % | 5.5 / 5.0 / 4.4 % |
+| Ubuntu, i7 TigerLake, Iris Xe, all cores busy with a test suite | meerkats / synthwave / aquarium | 81 / 83 / 85 %, 20-28 fps, up to 45 % late frames | 10 / 6 / 12 %, 29.9 fps, no late frames |
 
-### Windows (no admin rights needed)
+Building the list of shapes for a frame takes 0.1 to 0.5 ms in Rust (Python: 5 to 20 ms of drawing);
+the rest is handing the frame to the graphics card. The figures do not include the work of the graphics
+card itself or of the compositor. The CPU renderer needs about as much as the Python version (synthwave
+on the Windows PC: 63 % of one core, 21 ms per frame).
 
-```powershell
-.\build-windows.ps1 -Install     # build with PyInstaller and install for the current user
-```
+## History
 
-This copies the program to `%LOCALAPPDATA%\Programs\ClaudeVivarium`, sets it as your screen saver
-(timeout = `idle_seconds`, "display logon screen" on), and adds a Startup shortcut for the recorder.
-While the screensaver runs, **→ (right arrow)** switches to the next theme; any other key ends it.
-
-Undo with `ClaudeVivarium.exe --uninstall`. Log: `%LOCALAPPDATA%\ClaudeVivarium\vivarium.log`.
-
-Windows does not start a screen saver while the PC is locked (the lock screen just turns the display
-off after a minute). So when you leave, press **Ctrl+Alt+V** (Start menu: "Claude Vivarium - start
-now") instead of Win+L: Windows starts the vivarium right away and, as with the idle start, any key
-leads to the login.
-
-```powershell
-.venv\Scripts\python vivarium_win.py --windowed --demo    # preview from source
-```
-
-### macOS (no admin rights needed)
-
-Needs [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`).
-
-```bash
-git clone https://github.com/chwichmann/ClaudeVivarium.git && cd ClaudeVivarium
-./install-mac.sh                 # cairo + Python env + LaunchAgent; prints the next steps
-APP="$HOME/Library/Application Support/ClaudeVivarium"
-"$APP/venv/bin/python" "$APP/app/vivarium_mac.py" --selftest        # checks + PNGs on the Desktop
-"$APP/venv/bin/python" "$APP/app/vivarium_mac.py" --windowed --demo # preview, Esc closes
-tail -f ~/Library/Logs/ClaudeVivarium.log
-./install-mac.sh --uninstall
-```
-
-In System Settings > Lock Screen: start the macOS screen saver and turn the display off *later* than
-`idle_seconds`, and set "Require password ... " to **Immediately**.
-
-## Testing without watching
-
-```bash
-python3 render_preview.py --demo --sysmon --themes all --out /tmp/preview   # PNGs + frame times
-VIVARIUM_TEST="8;C:\temp\shots" ClaudeVivarium.exe /s                       # Windows: save each monitor after 8 s
-```
-
-## License
-
-MIT
+Claude Vivarium started as a Python program (Cairo, GTK on Linux, PyObjC on macOS, a PyInstaller `.scr`
+on Windows). The last state of that version is the tag **`python-final`** (`git checkout python-final`).

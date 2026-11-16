@@ -4,7 +4,7 @@
 #   ./install-linux.sh --uninstall stop and remove it (keeps the settings)
 # Builds with cargo (https://rustup.rs, plus "sudo apt install build-essential"). To install a binary
 # downloaded from the GitHub build instead, put it next to this script as "claude-vivarium-rs".
-# The Python version's service is disabled, because only one of the two should start the screensaver.
+# A service of the old Python version (before the move to Rust) is disabled if one is still enabled.
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HOME/.local/bin/claude-vivarium-rs"
@@ -15,7 +15,6 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$UNIT" "$BIN"
     systemctl --user daemon-reload
     echo "Uninstalled. Settings kept in ~/.config/claude-vivarium/config.ini"
-    echo "To go back to the Python version: systemctl --user enable --now claude-vivarium.service"
     exit 0
 fi
 
@@ -32,7 +31,7 @@ fi
 mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
 if systemctl --user is-enabled --quiet claude-vivarium.service 2>/dev/null; then
     systemctl --user disable --now claude-vivarium.service
-    echo "Disabled the Python version's service (its files stay installed)."
+    echo "Disabled the old Python version's service."
 fi
 systemctl --user stop claude-vivarium-rs.service 2>/dev/null || true
 install -m 755 "$BUILT" "$BIN"
