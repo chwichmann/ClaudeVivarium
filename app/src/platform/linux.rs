@@ -58,14 +58,108 @@ fn graphical_session_id() -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
-/// Ask GNOME to lock. Returns true if the request was accepted.
-fn request_lock(bus: Option<&Connection>) -> bool {
+/// Is the screen locked? GNOME's ScreenSaver "active" state (GetActive) is only set at the end of its
+/// lock animation. When a key press cuts that animation short - people type right away, GNOME needs a
+/// second key anyway - it stays false although the screen is locked and the password prompt is shown
+/// (screenShield.js, GNOME 46 and 50). logind's LockedHint is set the moment GNOME locks (`lock()` ->
+/// `_setLocked`) and cleared on unlock, so both are checked.
+pub struct LockState {
+    sys: Option<Connection>,
+    session: Option<OwnedObjectPath>,
+}
+
+impl LockState {
+    fn new() -> Self {
+        let sys = Connection::system().map_err(|e| log(&format!("no system bus: {e}"))).ok();
+        let session = sys.as_ref().and_then(login_session);
+        if sys.is_some() && session.is_none() {
+            log("logind session not found - relying on GNOME's ScreenSaver state only");
+        }
+        LockState { sys, session }
+    }
+
+    /// logind's LockedHint of the graphical session (None = unknown)
+    fn hint(&self) -> Option<bool> {
+        let (sys, session) = (self.sys.as_ref()?, self.session.as_ref()?);
+        let m = sys
+            .call_method(
+                Some("org.freedesktop.login1"),
+                session.as_str(),
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.freedesktop.login1.Session", "LockedHint"),
+            )
+            .ok()?;
+        let body = m.body();
+        match body.deserialize::<zbus::zvariant::Value>().ok()? {
+            zbus::zvariant::Value::Bool(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    fn locked(&self, bus: &Connection) -> bool {
+        self.hint() == Some(true) || screen_locked(bus)
+    }
+}
+
+/// The user's graphical session (logind "Display") - not XDG_SESSION_ID, which in a terminal or over
+/// SSH names that session instead of the GNOME one.
+fn display_session_id() -> Option<String> {
+    // SAFETY: getuid has no failure modes
+    let uid = unsafe { libc::getuid() };
+    let out = Command::new("loginctl").args(["show-user", &uid.to_string(), "-p", "Display", "--value"]).output().ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+fn login_session(sys: &Connection) -> Option<OwnedObjectPath> {
+    let sid = display_session_id()?;
+    let m = sys
+        .call_method(
+            Some("org.freedesktop.login1"),
+            "/org/freedesktop/login1",
+            Some("org.freedesktop.login1.Manager"),
+            "GetSession",
+            &(sid.as_str(),),
+        )
+        .ok()?;
+    m.body().deserialize::<OwnedObjectPath>().ok()
+}
+
+/// Ask GNOME to lock WITHOUT waiting for its answer. GNOME answers only when its lock animation has
+/// finished and never when a key press cuts it short; waiting for it froze the screensaver for 25 s on
+/// the already unlocked desktop. Whether the screen is locked is checked with `LockState::locked`.
+/// The loginctl fallback runs only when GNOME refuses the request at once and the screen is not locked.
+fn request_lock_nowait(bus: &Connection) {
+    let bus = bus.clone();
+    std::thread::spawn(move || {
+        let t0 = Instant::now();
+        if let Err(e) = bus.call_method(Some(SS.0), SS.1, Some(SS.2), "Lock", &()) {
+            let quick = t0.elapsed() < Duration::from_secs(3);
+            if quick && !LockState::new().locked(&bus) {
+                log(&format!("ScreenSaver.Lock failed: {e}; falling back to loginctl"));
+                lock_with_loginctl();
+            } else {
+                log(&format!("ScreenSaver.Lock answered late ({e}) - the screen was locked meanwhile, nothing to do"));
+            }
+        }
+    });
+}
+
+/// Ask GNOME to lock and wait for the answer (idle watcher only - it has no window that could freeze).
+/// The loginctl fallback does not run when the screen got locked meanwhile (by this request).
+fn request_lock(bus: Option<&Connection>, lock: &LockState) -> bool {
     if let Some(bus) = bus {
         match bus.call_method(Some(SS.0), SS.1, Some(SS.2), "Lock", &()) {
             Ok(_) => return true,
+            Err(_) if lock.locked(bus) => return true,
             Err(e) => log(&format!("ScreenSaver.Lock failed: {e}; falling back to loginctl")),
         }
     }
+    lock_with_loginctl()
+}
+
+fn lock_with_loginctl() -> bool {
     let mut cmd = Command::new("loginctl");
     cmd.arg("lock-session");
     if let Some(sid) = graphical_session_id() {
@@ -135,11 +229,12 @@ fn gnome_idle_delay() -> i64 {
 
 pub struct Os {
     bus: Option<Connection>,
+    lock: LockState,
 }
 
 impl Os {
     pub fn new() -> Self {
-        Os { bus: session_bus() }
+        Os { bus: session_bus(), lock: LockState::new() }
     }
 }
 
@@ -149,11 +244,20 @@ impl Platform for Os {
     }
 
     fn screen_locked(&mut self) -> bool {
-        self.bus.as_ref().is_some_and(screen_locked)
+        match self.bus.as_ref() {
+            Some(bus) => self.lock.locked(bus),
+            None => self.lock.hint() == Some(true),
+        }
     }
 
     fn request_lock(&mut self) -> bool {
-        request_lock(self.bus.as_ref())
+        match self.bus.as_ref() {
+            Some(bus) => {
+                request_lock_nowait(bus); // the window keeps running; wait_locked() polls screen_locked()
+                true
+            }
+            None => lock_with_loginctl(),
+        }
     }
 
     fn settle_seconds(&self) -> f64 {
@@ -194,10 +298,13 @@ enum Event {
 
 struct Daemon {
     bus: Connection,
+    lock: LockState,
     idle_override: i64,
     passthrough: Vec<String>,
     no_lock: bool,
     child: Option<Child>,
+    /// the screen was locked at some point while the current screensaver ran
+    seen_locked: bool,
     watch_id: Option<u32>,
     idle: i64,
     cfg_mtime: Option<f64>,
@@ -245,7 +352,7 @@ impl Daemon {
         if self.child.is_some() {
             return;
         }
-        if screen_locked(&self.bus) {
+        if self.lock.locked(&self.bus) {
             return; // already on the lock screen
         }
         if idle_inhibited(&self.bus) {
@@ -255,21 +362,41 @@ impl Daemon {
         let Ok(exe) = std::env::current_exe() else { return };
         log("idle - starting screensaver");
         match Command::new(exe).arg("run").args(&self.passthrough).spawn() {
-            Ok(c) => self.child = Some(c),
+            Ok(c) => {
+                self.child = Some(c);
+                self.seen_locked = false;
+            }
             Err(e) => log(&format!("could not start the screensaver: {e}")),
         }
     }
 
     fn check_child(&mut self) {
         let Some(c) = self.child.as_mut() else { return };
-        let Ok(Some(status)) = c.try_wait() else { return };
+        let code = match c.try_wait() {
+            Ok(None) => {
+                // still running: note when the screen gets locked (checked every 0.5 s)
+                if !self.seen_locked && self.lock.locked(&self.bus) {
+                    self.seen_locked = true;
+                }
+                return;
+            }
+            Ok(Some(status)) => status.code().unwrap_or(-1),
+            Err(_) => -1,
+        };
         self.child = None;
-        let locked = screen_locked(&self.bus);
-        log(&format!("screensaver exited (code {}, locked={locked})", status.code().unwrap_or(-1)));
-        if !locked && !self.no_lock {
-            log("screen not locked after screensaver - locking now");
-            request_lock(Some(&self.bus));
+        let locked = self.lock.locked(&self.bus);
+        log(&format!("screensaver exited (code {code}, locked={locked}, was locked meanwhile={})", self.seen_locked));
+        if locked || self.no_lock {
+            return;
         }
+        if self.seen_locked {
+            // the screen was locked while it ran and has been unlocked since: someone typed the
+            // password, so locking again would only lock out the person who just came back
+            log("screen was locked and has been unlocked since - not locking again");
+            return;
+        }
+        log("screen not locked after screensaver - locking now");
+        request_lock(Some(&self.bus), &self.lock);
     }
 }
 
@@ -301,10 +428,12 @@ pub fn daemon(args: &Args) -> Result<(), String> {
     }
     let mut d = Daemon {
         bus,
+        lock: LockState::new(),
         idle_override: args.num("--idle", 0.0)? as i64,
         no_lock: passthrough.iter().any(|a| a == "--no-lock"),
         passthrough,
         child: None,
+        seen_locked: false,
         watch_id: None,
         idle: 0,
         cfg_mtime: None,
@@ -346,8 +475,8 @@ pub fn daemon(args: &Args) -> Result<(), String> {
     if let Some(c) = d.child.as_mut() {
         if matches!(c.try_wait(), Ok(None)) {
             log("stopping while the screensaver is shown - locking first");
-            if !d.no_lock && !screen_locked(&d.bus) {
-                request_lock(Some(&d.bus));
+            if !d.no_lock && !d.lock.locked(&d.bus) {
+                request_lock(Some(&d.bus), &d.lock);
             }
             // SAFETY: SIGTERM to our own child (the screensaver also locks on SIGTERM itself)
             unsafe { libc::kill(c.id() as i32, libc::SIGTERM) };
@@ -360,7 +489,14 @@ pub fn selftest_lines() -> Vec<String> {
     let mut out = Vec::new();
     match session_bus() {
         Some(bus) => {
-            out.push(format!("screen locked: {}, idle inhibited by another app: {}", screen_locked(&bus), idle_inhibited(&bus)));
+            let ls = LockState::new();
+            out.push(format!(
+                "screen locked: {} (GNOME active: {}, logind LockedHint: {}), idle inhibited by another app: {}",
+                ls.locked(&bus),
+                screen_locked(&bus),
+                ls.hint().map_or("unknown".to_string(), |h| h.to_string()),
+                idle_inhibited(&bus)
+            ));
             let idle = bus
                 .call_method(Some(IDLE.0), IDLE.1, Some(IDLE.2), "GetIdletime", &())
                 .and_then(|m| m.body().deserialize::<u64>());
