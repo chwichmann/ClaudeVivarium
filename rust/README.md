@@ -89,7 +89,7 @@ version"); the programs can be downloaded from the run.
 ## Try it
 
 ```bash
-claude-vivarium-rs run --windowed --demo        # preview; N / Right / Space = next theme, Esc = close
+claude-vivarium-rs run --windowed --demo        # preview; N / Right / Space = next theme, D = demo on/off, Esc = close
 claude-vivarium-rs run --windowed               # your real sessions
 claude-vivarium-rs selftest                     # fonts, sessions, CPU/memory, graphics card, PNGs of all themes
 claude-vivarium-rs sessions                     # the session state as JSON (same fields as sessions.py)
@@ -99,10 +99,11 @@ claude-vivarium-rs run --demo --no-lock --max-minutes 0.2    # full screen for 1
 ```
 
 `run` without `--windowed` is the real screensaver: any key or click **locks the screen first** and
-then closes. Two things do not end it: **right arrow** switches to the next theme, and **down arrow**
+then closes. Three things do not end it: **right arrow** switches to the next theme, **D** switches
+between your real sessions and made-up demo sessions (and back), and **down arrow**
 (also up arrow, Tab or T) opens the **theme picker** - a small picture of every theme, including the
 seasonal ones that are out of season. Arrow keys select, Enter shows the theme, Esc closes the picker;
-it closes by itself after 20 seconds. The picker works in the preview window too. Options: `--themes`, `--theme-minutes`, `--hide-text`,
+it closes by itself after 20 seconds. The picker and D work in the preview window too. Options: `--themes`, `--theme-minutes`, `--hide-text`,
 `--max-minutes`, `--mouse-move hint|wake`, `--no-system-monitor`, `--no-lock`.
 `VIVARIUM_TEST="8;/tmp/shots"` saves every window as PNG after 8 s and exits.
 

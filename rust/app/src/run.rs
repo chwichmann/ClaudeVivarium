@@ -108,6 +108,8 @@ struct App {
     fake_system: Option<Rc<sysmon::SysData>>,
     gov: Governor,
     started: Instant,
+    /// when the made-up sessions started (so switching to demo data begins at the start of its cycle)
+    demo_since: Instant,
     last_frame: Instant,
     /// when the next frame is due (advances in even steps, so timer slop does not add up)
     due: Instant,
@@ -202,7 +204,7 @@ impl App {
             }
             Mode::Windowed => {
                 let (w, h) = self.o.window_size;
-                let attrs = Window::default_attributes().with_title("Claude Vivarium (preview - N: next theme, Esc: close)");
+                let attrs = Window::default_attributes().with_title("Claude Vivarium (preview - N: next theme, D: demo, Esc: close)");
                 let attrs = if self.o.window_physical {
                     attrs.with_inner_size(PhysicalSize::new(w, h))
                 } else {
@@ -252,7 +254,7 @@ impl App {
 
     // ------------------------------------------------------------------ data
     fn refresh(&mut self) {
-        let data = if self.o.demo { sessions::demo_sessions(self.secs()) } else { self.reader.read() };
+        let data = if self.o.demo { sessions::demo_sessions(self.demo_since.elapsed().as_secs_f64()) } else { self.reader.read() };
         let system = match &self.fake_system {
             Some(f) => Some(f.clone()),
             None => self.monitor.as_mut().and_then(|m| m.get()),
@@ -529,12 +531,29 @@ impl App {
         true
     }
 
+    /// D: switch between the real sessions and made-up ones, while running.
+    fn toggle_demo(&mut self) {
+        self.o.demo = !self.o.demo;
+        self.demo_since = Instant::now();
+        log(&format!("data: {}", if self.o.demo { "demo" } else { "live" }));
+        self.refresh();
+        let text = if self.o.demo { "Demo sessions   ·   D: back to your real sessions" } else { "Your real sessions" };
+        if let Some(s) = self.views.first_mut().and_then(|v| v.show.as_mut()) {
+            s.show_hint(text, 3.0);
+        }
+    }
+
     fn on_key(&mut self, key: &Key) {
         let next = matches!(key, Key::Named(NamedKey::ArrowRight));
+        let d = matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("d"));
         match self.o.mode {
             Mode::Preview(_) => {}
             Mode::Windowed => {
                 if self.picker_key(key) {
+                    return;
+                }
+                if d {
+                    self.toggle_demo();
                     return;
                 }
                 let n = matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("n"));
@@ -556,10 +575,12 @@ impl App {
                     return;
                 }
                 if next {
-                    // right arrow = next theme, any other key wakes (and locks)
+                    // right arrow = next theme, D = demo data, any other key wakes (and locks)
                     if let Some(s) = self.views.first_mut().and_then(|v| v.show.as_mut()) {
                         s.next_theme();
                     }
+                } else if d {
+                    self.toggle_demo();
                 } else {
                     self.wake("key");
                 }
@@ -639,6 +660,7 @@ impl ApplicationHandler for App {
             log(&format!("theme picker prepared in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
         }
         self.started = Instant::now();
+        self.demo_since = self.started;
         self.last_frame = Instant::now();
         self.due = self.last_frame;
         self.refresh();
@@ -741,6 +763,7 @@ pub fn run(o: Options) -> Result<(), String> {
         monitor,
         fake_system,
         started: now,
+        demo_since: now,
         last_frame: now,
         due: now,
         next_refresh: now,
